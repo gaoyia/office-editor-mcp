@@ -2107,7 +2107,8 @@ pub(crate) fn export_chart_image_at(
     let theme_xml = pkg.get("/xl/theme/theme1.xml").ok();
     let accents = super::chart_paint::theme_accents(theme_xml);
     let cells = chart_cell_cache(&pkg)?;
-    let png = super::chart_paint::render_chart_with_theme(
+    let blips = load_chart_blips(&pkg, &chart_part)?;
+    let png = super::chart_paint::render_chart_with_media(
         &space.root,
         width,
         height,
@@ -2118,6 +2119,8 @@ pub(crate) fn export_chart_image_at(
         &target.sheet,
         dpi,
         theme_xml,
+        None,
+        Some(&blips),
     )?;
     Ok(super::ExportedMedia {
         bytes: png,
@@ -2260,4 +2263,26 @@ impl FromLocalName for AnchorKind {
             _ => None,
         }
     }
+}
+
+
+fn load_chart_blips(
+    pkg: &crate::opc::Package,
+    chart_part: &str,
+) -> Result<std::collections::BTreeMap<String, Vec<u8>>, Error> {
+    let rels = crate::opc::Relationships::from_package(pkg, chart_part)?;
+    let mut blips = std::collections::BTreeMap::new();
+    for rel in &rels.rels {
+        if rel.is_external() || !rel.rel_type.ends_with("/image") {
+            continue;
+        }
+        let Ok(part) = crate::opc::resolve_id(pkg, chart_part, &rel.id) else {
+            continue;
+        };
+        let Ok(bytes) = pkg.get(&part) else {
+            continue;
+        };
+        blips.insert(rel.id.clone(), bytes.to_vec());
+    }
+    Ok(blips)
 }

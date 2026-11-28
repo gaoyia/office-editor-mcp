@@ -635,25 +635,8 @@
 
     #[test]
     fn valid_unsupported_backgrounds_are_not_silently_defaulted() {
-        for config in ["<c:spPr><a:ln w='25400'/></c:spPr>"] {
-            let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
-            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
-            assert!(
-                super::render_chart(
-                    &doc.root,
-                    576,
-                    336,
-                    FALLBACK_ACCENTS,
-                    None,
-                    ChartHost::Excel,
-                    None,
-                    ""
-                )
-                .is_err(),
-                "unsupported valid config: {config}"
-            );
-        }
         for config in [
+            "<c:spPr><a:ln w='25400'/></c:spPr>",
             "<c:roundedCorners val='0'/>",
             "<c:spPr><a:solidFill><a:srgbClr val='123456'/></a:solidFill></c:spPr>",
             "<c:roundedCorners val='1'/>",
@@ -1038,22 +1021,28 @@
     }
 
     #[test]
-    fn preset_dash_parser_requires_explicit_native_validated_cap_and_pen() {
+    fn preset_dash_parser_reuses_resolved_pen_for_official_like_omitted_cap_and_width() {
         for name in ["dash","dashDot","dot","lgDash","lgDashDot","lgDashDotDot","sysDash","sysDot","sysDashDot","sysDashDotDot"] {
-            for cap in ["flat","rnd"] {
+            for cap in ["flat","rnd","sq"] {
                 let doc=crate::xml::parse(format!("<ln w='50800' cap='{cap}'><prstDash val='{name}'/></ln>").as_bytes()).unwrap();
                 let a=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true);
-                if cap=="flat" || matches!(name,"dash"|"dot") {assert!(a.unwrap().dash.is_some());}else{assert!(a.is_err());}
+                assert!(a.unwrap().dash.is_some(), "{name} cap={cap}");
                 assert!(read_solid_ln(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default()).is_err());
             }
+            let omitted=crate::xml::parse(format!("<ln><prstDash val='{name}'/></ln>").as_bytes()).unwrap();
+            let style=read_ln_with_caps(&omitted.root,FALLBACK_ACCENTS,4.,RenderDpi::default(),true).unwrap();
+            assert!(style.dash.is_some(), "{name} omitted cap/w");
+            assert_eq!(style.cap, stroke::Cap::Round);
+            assert_eq!(style.width, 4.0);
+            assert!(read_solid_ln(&omitted.root,FALLBACK_ACCENTS,4.,RenderDpi::default()).is_err());
         }
     }
     #[test]
     fn preset_dash_rejects_unverified_bounds_ambiguity_and_complex_pens() {
-        for attrs in ["", "w='50800'", "cap='flat'", "w='0' cap='flat'", "w='NaN' cap='flat'", "w='bad' cap='flat'", "w='50800' cap='sq'"] {
+        for attrs in ["w='0' cap='flat'", "w='NaN' cap='flat'", "w='bad' cap='flat'"] {
             let doc=crate::xml::parse(format!("<ln {attrs}><prstDash val='dash'/></ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true).is_err());
         }
-        for body in ["<prstDash val='unknown'/>","<prstDash val='dash' phase='1'/>","<prstDash val='dash'><x/></prstDash>","<prstDash val='dash'/><prstDash val='solid'/>","<prstDash val='dash'/><custDash><ds d='100000' sp='100000'/></custDash>","<custDash><ds d='100000' sp='100000'/></custDash><prstDash val='dash'/>","<prstDash val='dash'/><noFill/>","<prstDash val='dash'/><solidFill><srgbClr val='175DB5'><alpha val='50000'/></srgbClr></solidFill>","<prstDash val='dash'/><headEnd type='triangle'/>"] {
+        for body in ["<prstDash val='unknown'/>","<prstDash val='dash' phase='1'/>","<prstDash val='dash'><x/></prstDash>","<prstDash val='dash'/><prstDash val='solid'/>","<prstDash val='dash'/><custDash><ds d='100000' sp='100000'/></custDash>","<custDash><ds d='100000' sp='100000'/></custDash><prstDash val='dash'/>","<prstDash val='dash'/><noFill/>","<prstDash val='dash'/><solidFill><srgbClr val='175DB5'><alpha val='50000'/></srgbClr></solidFill>"] {
             let doc=crate::xml::parse(format!("<ln w='50800' cap='flat'>{body}</ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true).is_err(),"{body}");
         }
     }
@@ -1423,7 +1412,11 @@
             if cap!="rnd" {assert!(read_solid_ln(&node.root,FALLBACK_ACCENTS,2.0,RenderDpi::default()).is_err());}
         }
         assert_ne!(images[0],images[1]);assert_ne!(images[0],images[2]);assert_ne!(images[1],images[2]);
-        for body in ["<a:prstDash val='dash'/>","<a:custDash><a:ds d='200000' sp='100000'/></a:custDash>","<a:headEnd type='triangle'/>","<a:miter/>","<a:solidFill><a:srgbClr val='175DB5'><a:alpha val='50000'/></a:srgbClr></a:solidFill>"] {
+        let dash=crate::xml::parse(b"<a:ln xmlns:a='a' cap='flat'><a:prstDash val='dash'/></a:ln>").unwrap();
+        assert!(read_ln_with_caps(&dash.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).unwrap().dash.is_some());
+        let arrow=crate::xml::parse(b"<a:ln xmlns:a='a' cap='flat'><a:headEnd type='triangle'/></a:ln>").unwrap();
+        assert!(read_ln_with_caps(&arrow.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).is_ok());
+        for body in ["<a:custDash><a:ds d='200000' sp='100000'/></a:custDash>","<a:miter/>","<a:solidFill><a:srgbClr val='175DB5'><a:alpha val='50000'/></a:srgbClr></a:solidFill>"] {
             let doc=crate::xml::parse(format!("<a:ln xmlns:a='a' cap='flat'>{body}</a:ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).is_err());
         }
         let mut thin=Canvas::new(90,40);let mut thick=Canvas::new(90,40);
@@ -1479,6 +1472,7 @@
             FrameFill::Linear(LinearFrameGrad {
                 stops: gradient::StopTable::new(vec![(0, [234, 247, 247]), (100_000, [15, 96, 130])]).unwrap(),
                 ang: LINEAR_ANG_HORIZONTAL,
+                path: None,
             })
         );
         let png = super::render_chart(
@@ -1526,6 +1520,7 @@
             FrameFill::Linear(LinearFrameGrad {
                 stops: gradient::StopTable::new(vec![(0, [15, 96, 130]), (100_000, [234, 247, 247])]).unwrap(),
                 ang: LINEAR_ANG_VERTICAL,
+                path: None,
             })
         );
         assert!(super::render_chart(
@@ -1568,7 +1563,7 @@
             for ang in [LINEAR_ANG_HORIZONTAL, LINEAR_ANG_VERTICAL] {
                 for clip in [false, true] {
                     let (x0, y0, x1, y1) = if clip { (-5, -2, width + 7, height + 3) } else { (0, 0, width, height) };
-                    let grad = LinearFrameGrad { stops: gradient::StopTable::new(vec![(0, start), (100_000, end)]).unwrap(), ang };
+                    let grad = LinearFrameGrad { stops: gradient::StopTable::new(vec![(0, start), (100_000, end)]).unwrap(), ang, path: None };
                     let mut canvas = Canvas::new(width as u32, height as u32);
                     canvas.fill_linear_rect(x0, y0, x1, y1, &grad);
                     for y in 0..height {
@@ -1612,7 +1607,8 @@
         ] {
             let fill = format!("<c:spPr><a:gradFill><a:gsLst>{stops}</a:gsLst><a:lin ang='0'/></a:gradFill></c:spPr>");
             let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")).as_bytes()).unwrap();
-            assert!(read_frame(&doc.root).is_err());
+            assert!(read_frame(&doc.root).is_ok(), "close-enough stop tables must parse: {stops}");
+            assert!(render_chart_at(&doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", RenderDpi::DEFAULT).is_ok());
         }
     }
 
@@ -3318,23 +3314,189 @@
                 }
             }
         }
-        for config in [
-            "<c:roundedCorners val='1'/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>",
-            "<c:roundedCorners val='0'/><c:spPr><a:ln><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln></c:spPr>",
-            "<c:roundedCorners val='0'/><c:spPr><a:effectLst><a:outerShdw/></a:effectLst></c:spPr>",
-        ] {
-            let xml=LONG_LEGEND.replace("<c:chart>",&format!("{config}<c:chart>"));
-            assert!(read_frame(&crate::xml::parse(xml.as_bytes()).unwrap().root).is_err());
+    }
+
+    #[test]
+    fn visible_frame_lines_effects_and_rounded_noline_export() {
+        // Rounded no-line: fill is clipped with the locked corner geometry,
+        // without the default gray border.
+        let rounded = "<c:roundedCorners val='1'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{rounded}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert!(frame.rounded);
+        assert!(!frame.border);
+        assert!(frame.chart_line.is_none());
+        let png = super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, stride, buf) = decode_rgba(&png);
+        assert_eq!((w, h), (80, 40));
+        let corner = (0usize * w + 0) * stride;
+        assert!(
+            stride == 4 && buf[corner + 3] < 32,
+            "rounded no-line outside corner should be clipped, alpha={}",
+            buf[corner + 3]
+        );
+        let inner = (0usize * w + w / 2) * stride;
+        assert_eq!(&buf[inner..inner + 3], &[234, 247, 247]);
+        if stride == 4 {
+            assert_eq!(buf[inner + 3], 255);
         }
+
+        // Visible red chart line, omitted width (close-enough 1pt default).
+        let red_ln = "<c:roundedCorners val='0'/><c:spPr><a:ln><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{red_ln}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert!(!frame.border);
+        assert_eq!(frame.chart_line.as_ref().map(|l| l.color), Some([255, 0, 0]));
+        let png = super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, stride, buf) = decode_rgba(&png);
+        assert_eq!((w, h), (80, 40));
+        let mid_top = (0usize * w + (w / 2)) * stride;
+        assert_eq!(buf[mid_top], 255);
+        assert!(buf[mid_top + 1] < 40 && buf[mid_top + 2] < 40, "top edge should be red");
+
+        // Bare `<a:ln w='25400'/>` (no fill) exports with close-enough black.
+        let bare = "<c:spPr><a:ln w='25400'/></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{bare}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert!(read_frame(&doc.root).is_ok());
+        assert!(super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .is_ok());
+
+        // Plot-area line exports (chart default gray border stays).
+        let plot_ln = "<c:roundedCorners val='0'/><c:chart><c:plotArea><c:spPr><a:ln w='12700'><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln></c:spPr>";
+        // LONG_LEGEND already has <c:chart>; inject plot spPr more carefully below.
+        let xml = LONG_LEGEND.replace(
+            "<c:plotArea>",
+            "<c:plotArea><c:spPr><a:ln w='12700'><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln></c:spPr>",
+        );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert!(frame.border);
+        assert_eq!(frame.plot_line.as_ref().map(|l| l.color), Some([255, 0, 0]));
+        assert!(super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .is_ok());
+        let _ = plot_ln;
+
+        // Empty outerShdw still exports and does not grow the canvas.
+        let empty_sh = "<c:roundedCorners val='0'/><c:spPr><a:effectLst><a:outerShdw/></a:effectLst></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{empty_sh}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert!(frame.chart_shadow.is_some());
+        let png = super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, _, _) = decode_rgba(&png);
+        assert_eq!((w, h), (80, 40));
+
+        // Official-like 45° outerShdw grows the canvas and keeps the chart fill.
+        let sh = "<c:roundedCorners val='0'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill><a:effectLst><a:outerShdw blurRad='63500' dist='53881' dir='2700000' rotWithShape='0'><a:scrgbClr r='0' g='0' b='0'/></a:outerShdw></a:effectLst></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{sh}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert!(frame.chart_shadow.is_some());
+        let png = super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, stride, buf) = decode_rgba(&png);
+        assert!(w > 80 && h > 40, "outerShdw should expand the canvas, got {w}x{h}");
+        // Blur padding sits on every side, so (0,0) is not the original
+        // chart origin. The fill must still appear somewhere, and a
+        // non-zero alpha dark pixel should appear in the expanded margin.
+        let mut saw_fill = false;
+        let mut saw_shadow = false;
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y * w + x) * stride;
+                let rgb = &buf[i..i + 3];
+                let a = if stride == 4 { buf[i + 3] } else { 255 };
+                if rgb == [234, 247, 247] && a == 255 {
+                    saw_fill = true;
+                }
+                let in_src = x < 80 && y < 40;
+                if !in_src && a > 8 && rgb[0] < 40 && rgb[1] < 40 && rgb[2] < 40 {
+                    saw_shadow = true;
+                }
+            }
+        }
+        assert!(saw_fill, "outerShdw composite should keep the chart fill");
+        assert!(saw_shadow, "outerShdw should paint a dark margin");
+    }
+
+    fn decode_rgba(png: &[u8]) -> (usize, usize, usize, Vec<u8>) {
+        let mut decoder = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; decoder.output_buffer_size()];
+        let info = decoder.next_frame(&mut buf).unwrap();
+        let stride = if info.color_type == png::ColorType::Rgba {
+            4
+        } else {
+            3
+        };
+        (info.width as usize, info.height as usize, stride, buf)
     }
 
     #[test]
     fn unsupported_frame_semantics_do_not_fall_back_to_white() {
         for config in [
             "<c:spPr><a:gradFill/></c:spPr>",
-            "<c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='2700000' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>",
-            "<c:spPr><a:pattFill prst='ltHorz'><a:fgClr><a:srgbClr val='0F6082'/></a:fgClr><a:bgClr><a:srgbClr val='EAF7F7'/></a:bgClr></a:pattFill></c:spPr>",
-            "<c:spPr><a:blipFill rotWithShape='1'><a:blip r:embed='rId1'/><a:stretch><a:fillRect/></a:stretch></a:blipFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='50000'/><a:alphaMod val='50000'/><a:hueMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:sysClr val='windowText' lastClr='FF0000'/></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:sysClr val='window' lastClr='00FF00'/></a:solidFill></c:spPr>",
@@ -3343,12 +3505,190 @@
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:hueMod val='50000'/><a:lumOff val='10000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumOff val='40000'/><a:lumMod val='60000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:tint val='60000'/><a:shade val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
-            "<c:spPr><a:ln w='25400'/></c:spPr>",
         ] {
             let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
             let doc = crate::xml::parse(xml.as_bytes()).unwrap();
             assert!(read_frame(&doc.root).is_err(), "unsupported frame must not silently lose semantics: {config}");
         }
+    }
+
+    fn sample_rgb(rgb: &[u8], w: u32, x: u32, y: u32) -> [u8; 3] {
+        let i = ((y * w + x) * 3) as usize;
+        [rgb[i], rgb[i + 1], rgb[i + 2]]
+    }
+
+    fn tiny_png(w: u32, h: u32, px: &[[u8; 3]]) -> Vec<u8> {
+        assert_eq!(px.len(), (w * h) as usize);
+        let mut rgb = Vec::with_capacity(px.len() * 3);
+        for c in px {
+            rgb.extend_from_slice(c);
+        }
+        let mut out = Vec::new();
+        let mut enc = png::Encoder::new(&mut out, w, h);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = enc.write_header().unwrap();
+        writer.write_image_data(&rgb).unwrap();
+        drop(writer);
+        out
+    }
+
+    #[test]
+    fn chart_area_lthorz_pattern_exports_horizontal_stripes() {
+        let fill = "<c:roundedCorners val='0'/><c:spPr><a:pattFill prst='ltHorz'><a:fgClr><a:srgbClr val='0F6082'/></a:fgClr><a:bgClr><a:srgbClr val='EAF7F7'/></a:bgClr></a:pattFill></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        match frame.fill {
+            FrameFill::Pattern(patt) => {
+                assert_eq!(patt.fg, [15, 96, 130]);
+                assert_eq!(patt.bg, [234, 247, 247]);
+            }
+            other => panic!("expected pattern, got {other:?}"),
+        }
+        let png = render_chart_at(
+            &doc.root,
+            80,
+            60,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        let (w, h, rgb) = decode_rgb(&png);
+        assert_eq!((w, h), (80, 60));
+        // At 96 dpi the 8x8 ltHorz cell has fg rows at y%8 == 0 or 4.
+        let y_fg = sample_rgb(&rgb, w, 4, 8);
+        let y_bg = sample_rgb(&rgb, w, 4, 10);
+        assert_eq!(y_fg, [15, 96, 130]);
+        assert_eq!(y_bg, [234, 247, 247]);
+        assert_eq!(sample_rgb(&rgb, w, 20, 8), [15, 96, 130]);
+    }
+
+    #[test]
+    fn chart_area_stretch_blip_exports_when_media_is_present() {
+        let fill = "<c:roundedCorners val='0'/><c:spPr><a:blipFill dpi='0' rotWithShape='1'><a:blip r:embed='rId1'><a:alphaModFix/></a:blip><a:srcRect/><a:stretch><a:fillRect/></a:stretch></a:blipFill></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        match frame.fill {
+            FrameFill::Blip(blip) => assert_eq!(blip.embed, "rId1"),
+            other => panic!("expected blip, got {other:?}"),
+        }
+        assert!(
+            render_chart_at(
+                &doc.root,
+                80,
+                40,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+                RenderDpi::DEFAULT,
+            )
+            .is_err(),
+            "missing media must not fall back to white"
+        );
+        let mut tile = Vec::new();
+        for y in 0..16u32 {
+            for x in 0..16u32 {
+                tile.push(if x < 8 { [200, 0, 0] } else { [0, 0, 200] });
+            }
+            let _ = y;
+        }
+        let bytes = tiny_png(16, 16, &tile);
+        let mut blips = std::collections::BTreeMap::new();
+        blips.insert("rId1".to_string(), bytes);
+        let png = render_chart_with_media(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+            None,
+            None,
+            Some(&blips),
+        )
+        .unwrap();
+        let (w, h, rgb) = decode_rgb(&png);
+        assert_eq!((w, h), (80, 40));
+        let left = sample_rgb(&rgb, w, 2, 2);
+        let right = sample_rgb(&rgb, w, 77, 2);
+        assert!(left[0] > right[0] && left[2] < right[2], "left={left:?} right={right:?}");
+    }
+
+    #[test]
+    fn close_enough_frame_fills_export_instead_of_rejecting() {
+        // Diagonal linear, extra pattern presets, path shade, alpha/missing/duplicate
+        // stops, and a tiled blip must produce an image. This is a close-enough
+        // export path, not a unique official-matrix lock.
+        let diag = "<c:roundedCorners val='0'/><c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='2700000' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>";
+        let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{diag}<c:chart>")).as_bytes()).unwrap();
+        assert!(matches!(read_frame(&doc.root).unwrap().fill, FrameFill::Linear(_)));
+        assert!(render_chart_at(&doc.root, 80, 40, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", RenderDpi::DEFAULT).is_ok());
+
+        let patt = "<c:roundedCorners val='0'/><c:spPr><a:pattFill prst='pct10'><a:fgClr><a:srgbClr val='0F6082'/></a:fgClr><a:bgClr><a:srgbClr val='EAF7F7'/></a:bgClr></a:pattFill></c:spPr>";
+        let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{patt}<c:chart>")).as_bytes()).unwrap();
+        assert!(matches!(read_frame(&doc.root).unwrap().fill, FrameFill::Pattern(_)));
+        let png = render_chart_at(&doc.root, 80, 40, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", RenderDpi::DEFAULT).unwrap();
+        let (w, _, rgb) = decode_rgb(&png);
+        let mut fg = 0u32;
+        let mut bg = 0u32;
+        for y in 0..8u32 {
+            for x in 0..8u32 {
+                let c = sample_rgb(&rgb, w, x, y);
+                if c == [15, 96, 130] { fg += 1; }
+                if c == [234, 247, 247] { bg += 1; }
+            }
+        }
+        assert!(fg > 0 && bg > fg, "pct10 should be a sparse fg dither, fg={fg} bg={bg}");
+
+        let path = "<c:roundedCorners val='0'/><c:spPr><a:gradFill rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFFFF'/></a:gs><a:gs pos='100000'><a:srgbClr val='000000'/></a:gs></a:gsLst><a:path path='circle'/></a:gradFill></c:spPr>";
+        let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{path}<c:chart>")).as_bytes()).unwrap();
+        match read_frame(&doc.root).unwrap().fill {
+            FrameFill::Linear(grad) => assert_eq!(grad.path, Some(PathShade::Circle)),
+            other => panic!("expected path gradient, got {other:?}"),
+        }
+        assert!(render_chart_at(&doc.root, 80, 40, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", RenderDpi::DEFAULT).is_ok());
+
+        let mut tile = Vec::new();
+        for y in 0..8u32 {
+            for x in 0..8u32 {
+                tile.push(if (x + y) % 2 == 0 { [200, 0, 0] } else { [0, 0, 200] });
+            }
+        }
+        let bytes = tiny_png(8, 8, &tile);
+        let mut blips = std::collections::BTreeMap::new();
+        blips.insert("rId1".to_string(), bytes);
+        let tiled = "<c:roundedCorners val='0'/><c:spPr><a:blipFill rotWithShape='1'><a:blip r:embed='rId1'/><a:tile sx='100000' sy='100000' tx='0' ty='0' flip='none' algn='tl'/></a:blipFill></c:spPr>";
+        let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{tiled}<c:chart>")).as_bytes()).unwrap();
+        match read_frame(&doc.root).unwrap().fill {
+            FrameFill::Blip(blip) => assert!(blip.tile.is_some()),
+            other => panic!("expected tiled blip, got {other:?}"),
+        }
+        render_chart_with_media(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+            None,
+            None,
+            Some(&blips),
+        )
+        .expect("tiled blip with media must export");
     }
 
     #[test]
@@ -4815,13 +5155,32 @@
             let doc = crate::xml::parse(format!("<dLbls>{body}</dLbls>").as_bytes()).unwrap();
             read_deleted_label_points(Some(&doc.root), len)
         };
-        assert_eq!(read(valid, 3).unwrap(), vec![1]);
+        let deleted = |body: &str, len: usize| read(body, len).unwrap().deleted;
+        assert_eq!(deleted(valid, 3), vec![1]);
         assert_eq!(
-            read(&valid.replace("val='1'/></dLbl>", "/></dLbl>"), 3).unwrap(),
+            deleted(&valid.replace("val='1'/></dLbl>", "/></dLbl>"), 3),
             vec![1]
         );
         let metadata = valid.replace("</dLbl>", "<extLst><ext uri='{CE6537A1-D6FC-4f65-9D91-7224C49458BB}'/><ext uri='{C3380CC4-5D6E-409C-BE32-E72D297353CC}'><uniqueId val='{00000001-2765-4173-A018-3A6CF43989F2}'/></ext></extLst></dLbl>");
-        assert_eq!(read(&metadata, 3).unwrap(), vec![1]);
+        assert_eq!(deleted(&metadata, 3), vec![1]);
+        assert_eq!(
+            deleted(&valid.replace("delete val='1'", "delete val='0'"), 3),
+            Vec::<usize>::new()
+        );
+        assert_eq!(
+            read(&valid.replace("delete val='1'", "delete val='0'"), 3)
+                .unwrap()
+                .shown,
+            vec![1]
+        );
+        assert_eq!(
+            deleted(&valid.replace("<delete val='1'/>", "<showVal val='0'/>"), 3),
+            vec![1]
+        );
+        assert_eq!(
+            deleted(&valid.replace("<delete val='1'/>", "<showVal val='1'/>"), 3),
+            Vec::<usize>::new()
+        );
         for bad in [
             valid.replace("idx val='1'", "idx val='-1'"),
             valid.replace("idx val='1'", "idx val='3'"),
@@ -4830,8 +5189,8 @@
             valid.replace("idx val='1'", "idx val='184467440737095516160'"),
             valid.replace("<idx val='1'/>", ""),
             valid.replace("<delete val='1'/>", ""),
-            valid.replace("delete val='1'", "delete val='0'"),
             valid.replace("</dLbl>", "<showVal val='1'/></dLbl>"),
+            valid.replace("delete val='1'", "delete val='0'").replace("</dLbl>", "<showVal val='0'/></dLbl>"),
             valid.replace("</dLbl>", "<spPr><solidFill/></spPr></dLbl>"),
             valid.replace("</dLbl>", "<dLblPos val='outEnd'/></dLbl>"),
             valid.replace("</dLbl>", "<tx><rich/></tx></dLbl>"),
@@ -4862,6 +5221,26 @@
         assert!(
             data_labels_hidden(Some(&other_kind.root)).is_err(),
             "other chart kinds remain NI"
+        );
+
+        let keep = "<c:dLbls><c:dLbl><c:idx val='1'/><c:delete val='0'/></c:dLbl><c:showVal val='1'/></c:dLbls>";
+        let hide = "<c:dLbls><c:dLbl><c:idx val='1'/><c:showVal val='0'/></c:dLbl><c:showVal val='1'/></c:dLbls>";
+        let reveal = "<c:dLbls><c:dLbl><c:idx val='1'/><c:showVal val='1'/></c:dLbl><c:showVal val='0'/></c:dLbls>";
+        for (labels, expect_deleted) in [(keep, Vec::<usize>::new()), (hide, vec![1])] {
+            let ser = line_ser(0, "S1", &[Some(4.0), Some(6.0), Some(9.0)], labels);
+            let xml = bar_xml(&ser, "", "minMax", Some("col"));
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let chart =
+                read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+            assert_eq!(chart.series[0].deleted_label_points, expect_deleted);
+            assert!(chart.series[0].value_label.is_some());
+        }
+        let ser = line_ser(0, "S1", &[Some(4.0), Some(6.0), Some(9.0)], reveal);
+        let xml = bar_xml(&ser, "", "minMax", Some("col"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert!(
+            read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "point showVal=1 on a hidden series stays NI until those labels can be painted"
         );
     }
 
@@ -4979,9 +5358,11 @@
             read_value_label(&wrapper.root, &ser.root, PlotKind::ClusteredColumn).unwrap(),
             Some(ValueLabel::InsideEnd)
         );
-        for kind in [PlotKind::ClusteredBar, PlotKind::StandardLine] {
-            assert!(read_value_label(&wrapper.root, &ser.root, kind).is_err());
-        }
+        assert_eq!(
+            read_value_label(&wrapper.root, &ser.root, PlotKind::ClusteredBar).unwrap(),
+            Some(ValueLabel::InsideEnd)
+        );
+        assert!(read_value_label(&wrapper.root, &ser.root, PlotKind::StandardLine).is_err());
         let ser = line_ser(
             0,
             "S1",
@@ -4990,9 +5371,32 @@
         );
         let xml = bar_xml(&ser, "", "minMax", Some("col"));
         let doc = crate::xml::parse(xml.as_bytes()).unwrap();
-        assert!(
-            read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "zero fallback placement is not silently approximated"
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("column inEnd with a zero must parse so the 0 label can fall back outside");
+        assert_eq!(chart.series[0].value_label, Some(ValueLabel::InsideEnd));
+        let mixed = bar_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(-4.0), Some(0.0), Some(9.0)],
+                "<c:dLbls><c:showVal val='1'/><c:dLblPos val='inEnd'/></c:dLbls>",
+            ),
+            "",
+            "minMax",
+            Some("col"),
+        );
+        let mixed_doc = crate::xml::parse(mixed.as_bytes()).unwrap();
+        let mixed_chart = read_chart(
+            &mixed_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .expect("mixed inEnd with a zero must export rather than drop the 0 label");
+        assert_eq!(
+            mixed_chart.series[0].value_label,
+            Some(ValueLabel::InsideEnd)
         );
     }
 
@@ -5206,19 +5610,22 @@
                 }
             }
         }
-        for xml in [
-            base.replace("val='outEnd'", "val='inEnd'"),
-            base.replace("<c:v>9</c:v>", "<c:v>9.5</c:v>"),
-            base.replace("<c:v>9</c:v>", "<c:v>#N/A</c:v>"),
-        ] {
-            let xml = xml
-                .replace("<c:valAx>", "<c:valAx><c:axPos val='b'/>")
-                .replace("<c:catAx/>", "<c:catAx><c:axPos val='l'/></c:catAx>");
-            assert!(
-                render_line(&xml).is_err(),
-                "unlocked bar labels must remain NI"
-            );
-        }
+        let axes = |xml: String| {
+            xml.replace("<c:valAx>", "<c:valAx><c:axPos val='b'/>")
+                .replace("<c:catAx/>", "<c:catAx><c:axPos val='l'/></c:catAx>")
+        };
+        // Official inEnd zero falls back outside; the chart must export.
+        render_line(&axes(base.replace("val='outEnd'", "val='inEnd'")))
+            .expect("bar inEnd with a zero value should export via outside fallback");
+        // General decimals on the locked outEnd path now export.
+        assert!(
+            render_line(&axes(base.replace("<c:v>9</c:v>", "<c:v>9.5</c:v>"))).is_ok(),
+            "bar General decimal outEnd should export"
+        );
+        assert!(
+            render_line(&axes(base.replace("<c:v>9</c:v>", "<c:v>#N/A</c:v>"))).is_err(),
+            "bar error-point labels must remain NI"
+        );
     }
 
     #[test]
@@ -5264,7 +5671,14 @@
         );
         assert_eq!(value_label_text(-0.0), Some("0".to_owned()));
         assert_eq!(value_label_text(-42.0), Some("-42".to_owned()));
-        for value in [1.25, f64::INFINITY, 100_000_000_000.0] {
+        assert_eq!(value_label_text(1.25), Some("1.25".to_owned()));
+        assert_eq!(value_label_text(4.5), Some("4.5".to_owned()));
+        assert_eq!(value_label_text(6.3), Some("6.3".to_owned()));
+        assert_eq!(
+            value_label_text(9.1999999999999993),
+            Some("9.2".to_owned())
+        );
+        for value in [f64::INFINITY, 100_000_000_000.0] {
             assert!(value_label_text(value).is_none());
         }
         let xml = standard_line_xml(
@@ -5277,8 +5691,8 @@
             "",
         );
         assert!(
-            render_line(&xml).is_err(),
-            "decimal General labels need an actual formatter, not an approximate integer"
+            render_line(&xml).is_ok(),
+            "General decimal labels should export with the close-enough formatter"
         );
     }
 
@@ -5363,31 +5777,7 @@
                 r#"grouping val="standard""#,
                 r#"grouping val="percentStacked""#,
             ),
-            standard_line_xml(
-                &line_ser(
-                    0,
-                    "S1",
-                    &[Some(1.0), Some(2.0), Some(3.0)],
-                    r#"<c:smooth val="1"/>"#,
-                ),
-                "",
-            ),
-            standard_line_xml(
-                &line_ser(
-                    0,
-                    "S1",
-                    &[Some(1.0), Some(2.0), Some(3.0)],
-                    r#"<c:spPr><a:ln w="28575"><a:prstDash val="dash"/><a:solidFill><a:srgbClr val="156082"/></a:solidFill></a:ln></c:spPr>"#,
-                ),
-                "",
-            ),
             standard_line_xml(&base, "").replace(r#"varyColors val="0""#, r#"varyColors val="1""#),
-            line_space(
-                r#"<c:line3DChart><c:grouping val="standard"/><c:ser>
-          <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
-        </c:ser></c:line3DChart>"#,
-                "",
-            ),
             line_space(
                 r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser>
           <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
@@ -5634,8 +6024,6 @@
         let cases = [
             scatter_xml("line", &ser, ""),
             scatter_xml("none", &ser, ""),
-            scatter_xml("smoothMarker", &ser, ""),
-            scatter_xml("smooth", &ser, ""),
             scatter_xml(
                 "lineMarker",
                 &scatter_ser(
@@ -5743,10 +6131,991 @@
             "</c:valAx>",
             r#"<c:crossBetween val="midCat"/></c:valAx>"#,
         );
-        assert!(
-            render_scatter(&smooth_midcat).is_err(),
-            "smoothMarker stays NI even with official midCat"
+        // Official-like smoothMarker + midCat must produce an image
+        // (close-enough curve, not a unique interpolation lock).
+        render_scatter(&smooth_midcat).unwrap();
+        render_scatter(&scatter_xml("smooth", &ser, "")).unwrap();
+        render_scatter(&scatter_xml("smoothMarker", &ser, "")).unwrap();
+    }
+
+    fn official_like_f27_axes(xml: &str) -> String {
+        xml.replace(
+            r#"<c:orientation val="minMax"/>"#,
+            r#"<c:orientation val="minMax"/><c:max val="50"/><c:min val="0"/>"#,
+        )
+        .replace(
+            "</c:valAx>",
+            r#"<c:majorUnit val="10"/><c:crossBetween val="midCat"/></c:valAx>"#,
+        )
+    }
+
+    fn official_like_f27_scatter_xml(style: &str, extra: &str) -> String {
+        let xs = [Some(10.0), Some(20.0), Some(30.0), Some(40.0)];
+        let y1 = [Some(20.0), Some(40.0), Some(10.0), Some(30.0)];
+        let y2 = [Some(15.0), Some(25.0), Some(35.0), Some(20.0)];
+        official_like_f27_axes(&scatter_xml(
+            style,
+            &format!(
+                "{}{}",
+                scatter_ser(0, "F27S1", &xs, &y1, extra),
+                scatter_ser(1, "F27S2", &xs, &y2, extra),
+            ),
+            "",
+        ))
+    }
+
+    #[test]
+    fn official_like_f27_scatter_styles_export_and_paint_ink() {
+        let line = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#,
         );
+        let smooth = official_like_f27_scatter_xml(
+            "smoothMarker",
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="1"/>"#,
+        );
+        let smooth_marker = official_like_f27_scatter_xml(
+            "smoothMarker",
+            r#"<c:smooth val="1"/>"#,
+        );
+        let marker = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:spPr><a:ln w="38100"><a:noFill/></a:ln></c:spPr><c:smooth val="0"/>"#,
+        );
+        let line_marker = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:smooth val="0"/>"#,
+        );
+        let style_smooth = official_like_f27_scatter_xml(
+            "smooth",
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="1"/>"#,
+        );
+        let cases = [
+            ("line", &line),
+            ("smooth", &smooth),
+            ("smoothMarker", &smooth_marker),
+            ("marker", &marker),
+            ("lineMarker", &line_marker),
+            ("style-smooth", &style_smooth),
+        ];
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        for (name, xml) in cases {
+            let png = render_scatter(xml)
+                .unwrap_or_else(|err| panic!("official-like F27 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a1, 18) >= 20,
+                "official-like F27 {name} should paint the first series"
+            );
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a2, 18) >= 20,
+                "official-like F27 {name} should paint the second series"
+            );
+        }
+        let straight = render_scatter(&line).unwrap();
+        let curved = render_scatter(&smooth).unwrap();
+        assert_ne!(
+            straight, curved,
+            "close-enough scatter smooth must curve, not copy the polyline"
+        );
+        let marked = render_scatter(&smooth_marker).unwrap();
+        assert_ne!(
+            curved, marked,
+            "smoothMarker should keep markers on the close-enough curve"
+        );
+    }
+
+    #[test]
+    fn leftover_f27_styles_without_official_saved_form_stay_not_implemented() {
+        let ser = scatter_ser(
+            0,
+            "S1",
+            &[Some(1.0), Some(2.0), Some(3.0)],
+            &[Some(4.0), Some(5.0), Some(6.0)],
+            "",
+        );
+        for (i, xml) in [
+            official_like_f27_axes(&scatter_xml("none", &ser, "")),
+            official_like_f27_axes(&scatter_xml("line", &ser, "")),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let err = render_scatter(xml)
+                .expect_err(&format!("leftover F27 style case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F27 style case {i} should stay NotImplemented"
+            );
+        }
+    }
+
+    fn official_like_f28_axes(xml: &str) -> String {
+        xml.replace(
+            r#"<c:valAx><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>"#,
+            r#"<c:valAx><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:axPos val="l"/><c:majorGridlines/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>"#,
+        )
+    }
+
+    fn official_like_f28_line_xml(extra1: &str, extra2: &str) -> String {
+        official_like_f28_axes(&standard_line_xml(
+            &format!(
+                "{}{}",
+                line_ser(0, "F28S1", &[Some(10.0), Some(40.0), Some(10.0), Some(40.0)], extra1),
+                line_ser(1, "F28S2", &[Some(20.0), Some(10.0), Some(35.0), Some(15.0)], extra2),
+            ),
+            "",
+        ))
+    }
+
+    #[test]
+    fn official_like_f28_line_series_smooth_export_and_paint_ink() {
+        let none_on = r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="1"/>"#;
+        let none_off = r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#;
+        let both = official_like_f28_line_xml(none_on, none_on);
+        let marked = official_like_f28_line_xml(
+            r#"<c:smooth val="1"/>"#,
+            r#"<c:smooth val="1"/>"#,
+        );
+        let mixed = official_like_f28_line_xml(none_off, none_on);
+        let control = official_like_f28_line_xml(none_off, none_off);
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        for (name, xml) in [
+            ("both-smooth", &both),
+            ("markers-smooth", &marked),
+            ("one-smooth", &mixed),
+            ("control", &control),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F28 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a1, 18) >= 20,
+                "official-like F28 {name} should paint the first series"
+            );
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a2, 18) >= 20,
+                "official-like F28 {name} should paint the second series"
+            );
+        }
+        let curved = render_line(&both).unwrap();
+        let straight = render_line(&control).unwrap();
+        assert_ne!(
+            curved, straight,
+            "close-enough line smooth must curve, not copy the polyline"
+        );
+        let mixed_png = render_line(&mixed).unwrap();
+        assert_ne!(
+            mixed_png, curved,
+            "F28 mixed series must keep the unsmoothed series as a polyline"
+        );
+        assert_ne!(
+            mixed_png, straight,
+            "F28 mixed series must still curve the smoothed series"
+        );
+        let marked_png = render_line(&marked).unwrap();
+        assert_ne!(
+            marked_png, curved,
+            "F28 markers-smooth should keep auto markers on the close-enough curve"
+        );
+    }
+
+    #[test]
+    fn leftover_f28_smooth_variants_without_official_gold_stay_not_implemented() {
+        let none_off = r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#;
+        let none_on = r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="1"/>"#;
+        let control = official_like_f28_line_xml(none_off, none_off);
+        let wrapper = official_like_f28_axes(&standard_line_xml(
+            &format!(
+                "{}{}",
+                line_ser(0, "F28S1", &[Some(10.0), Some(40.0), Some(10.0), Some(40.0)], none_off),
+                line_ser(1, "F28S2", &[Some(20.0), Some(10.0), Some(35.0), Some(15.0)], none_off),
+            ),
+            "",
+        ))
+        .replace("</c:lineChart>", r#"<c:smooth val="1"/></c:lineChart>"#);
+        let stacked = official_like_f28_line_xml(none_on, none_on).replace(
+            r#"grouping val="standard""#,
+            r#"grouping val="stacked""#,
+        );
+        let dashed = official_like_f28_axes(&standard_line_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(10.0), Some(40.0), Some(10.0), Some(40.0)],
+                r#"<c:marker><c:symbol val="none"/></c:marker><c:spPr><a:ln w="28575"><a:prstDash val="dash"/><a:solidFill><a:srgbClr val="156082"/></a:solidFill></a:ln></c:spPr><c:smooth val="1"/>"#,
+            ),
+            "",
+        ));
+        for (i, xml) in [wrapper, stacked, dashed].iter().enumerate() {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F28 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F28 case {i} should stay NotImplemented"
+            );
+        }
+        // The unsmoothed official-like control must still export.
+        render_line(&control).unwrap();
+    }
+
+    fn official_like_f29_line_xml(extra: &str) -> String {
+        official_like_f28_axes(&standard_line_xml(
+            &line_ser(
+                0,
+                "F29S1",
+                &[Some(40.0); 8],
+                extra,
+            ),
+            "",
+        ))
+    }
+
+    fn official_like_f29_ln(prst: &str, cap: &str) -> String {
+        let cap_attr = if cap.is_empty() {
+            String::new()
+        } else {
+            format!(r#" cap="{cap}""#)
+        };
+        format!(
+            r#"<c:spPr><a:ln{cap_attr}><a:prstDash val="{prst}"/></a:ln></c:spPr><c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#
+        )
+    }
+
+    #[test]
+    fn official_like_f29_prst_dash_export_and_paint_ink() {
+        let solid = official_like_f29_line_xml(&official_like_f29_ln("solid", ""));
+        let dash = official_like_f29_line_xml(&official_like_f29_ln("dash", ""));
+        let square_dot = official_like_f29_line_xml(&official_like_f29_ln("dot", "sq"));
+        let round_dot = official_like_f29_line_xml(&official_like_f29_ln("dot", "rnd"));
+        let dash_dot = official_like_f29_line_xml(&official_like_f29_ln("dashDot", ""));
+        let long_dash = official_like_f29_line_xml(&official_like_f29_ln("lgDash", ""));
+        let accent = FALLBACK_ACCENTS[0];
+        let mut pngs = Vec::new();
+        for (name, xml) in [
+            ("solid", &solid),
+            ("dash", &dash),
+            ("squareDot", &square_dot),
+            ("roundDot", &round_dot),
+            ("dashDot", &dash_dot),
+            ("longDash", &long_dash),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F29 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, accent, 18) >= 20,
+                "official-like F29 {name} should paint the series"
+            );
+            pngs.push((name, png));
+        }
+        let solid_png = &pngs[0].1;
+        for (name, png) in &pngs[1..] {
+            assert_ne!(
+                png, solid_png,
+                "close-enough F29 {name} must dash, not copy the solid stroke"
+            );
+        }
+        assert_ne!(
+            pngs[1].1, pngs[4].1,
+            "F29 dash and dashDot must keep distinct preset periods"
+        );
+        assert_ne!(
+            pngs[1].1, pngs[5].1,
+            "F29 dash and lgDash must keep distinct preset periods"
+        );
+        assert_ne!(
+            pngs[2].1, pngs[3].1,
+            "F29 square and round dots must reuse the same cap sampler"
+        );
+    }
+
+    #[test]
+    fn leftover_f29_dash_variants_without_official_gold_stay_not_implemented() {
+        let dash = official_like_f29_line_xml(&official_like_f29_ln("dash", ""));
+        let unknown = official_like_f29_line_xml(&official_like_f29_ln("unknown", ""));
+        let custom_omitted = official_like_f29_line_xml(
+            r#"<c:spPr><a:ln><a:custDash><a:ds d="200000" sp="100000"/></a:custDash></a:ln></c:spPr><c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#,
+        );
+        let scatter = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:spPr><a:ln><a:prstDash val="dash"/></a:ln></c:spPr><c:marker><c:symbol val="none"/></c:marker>"#,
+        );
+        for (i, xml) in [unknown, custom_omitted, scatter].iter().enumerate() {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F29 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F29 case {i} should stay NotImplemented"
+            );
+        }
+        render_line(&dash).unwrap();
+    }
+
+    fn official_like_f30_line_xml(extra: &str) -> String {
+        official_like_f28_axes(&standard_line_xml(
+            &line_ser(
+                0,
+                "F30S1",
+                &[Some(40.0); 8],
+                extra,
+            ),
+            "",
+        ))
+    }
+
+    fn official_like_f30_marker() -> &'static str {
+        r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#
+    }
+
+    fn official_like_f30_ln(attrs: &str, children: &str) -> String {
+        format!(
+            r#"<c:spPr><a:ln{attrs}>{children}</a:ln></c:spPr>{}"#,
+            official_like_f30_marker()
+        )
+    }
+
+    #[test]
+    fn official_like_f30_cmpd_algn_arrows_export_and_paint_ink() {
+        let control_default = official_like_f30_line_xml(official_like_f30_marker());
+        let control_thick = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="sng""#, ""));
+        let inset = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" algn="in""#, ""));
+        let thin_thin = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="dbl""#, ""));
+        let thin_thick = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="thinThick""#, ""));
+        let thick_thin = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="thickThin""#, ""));
+        let tri = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="tri""#, ""));
+        let arrows_triangle = official_like_f30_line_xml(&official_like_f30_ln(
+            r#" w="76200""#,
+            r#"<a:headEnd type="triangle"/><a:tailEnd type="triangle"/>"#,
+        ));
+        let arrows_mixed = official_like_f30_line_xml(&official_like_f30_ln(
+            r#" w="76200""#,
+            r#"<a:headEnd type="arrow" w="lg" len="lg"/><a:tailEnd type="stealth" w="sm" len="sm"/>"#,
+        ));
+        let arrows_oval = official_like_f30_line_xml(&official_like_f30_ln(
+            r#" w="76200""#,
+            r#"<a:headEnd type="oval" w="med" len="med"/><a:tailEnd type="diamond" w="lg" len="lg"/>"#,
+        ));
+        let accent = FALLBACK_ACCENTS[0];
+        let mut pngs = Vec::new();
+        for (name, xml) in [
+            ("controlDefault", &control_default),
+            ("controlThick", &control_thick),
+            ("insetPen", &inset),
+            ("thinThin", &thin_thin),
+            ("thinThick", &thin_thick),
+            ("thickThin", &thick_thin),
+            ("thickBetweenThin", &tri),
+            ("arrowsTriangle", &arrows_triangle),
+            ("arrowsMixed", &arrows_mixed),
+            ("arrowsOvalDiamond", &arrows_oval),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F30 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, accent, 18) >= 20,
+                "official-like F30 {name} should paint the series"
+            );
+            pngs.push((name, png));
+        }
+        assert_ne!(
+            pngs[0].1, pngs[1].1,
+            "F30 thick control must use the explicit 6pt pen, not the omitted-width default"
+        );
+        for (name, png) in &pngs[2..] {
+            assert_ne!(
+                png, &pngs[0].1,
+                "close-enough F30 {name} must keep the official explicit width, not the default control"
+            );
+        }
+    }
+
+    #[test]
+    fn leftover_f30_variants_without_official_gold_stay_not_implemented() {
+        let thick = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="sng""#, ""));
+        let unknown_cmpd = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="unknown""#, ""));
+        let unknown_algn = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" algn="out""#, ""));
+        let unknown_end = official_like_f30_line_xml(&official_like_f30_ln(
+            r#" w="76200""#,
+            r#"<a:headEnd type="unknown"/>"#,
+        ));
+        let scatter = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:spPr><a:ln w="76200" cmpd="dbl"/></c:spPr><c:marker><c:symbol val="none"/></c:marker>"#,
+        );
+        for (i, xml) in [unknown_cmpd, unknown_algn, unknown_end, scatter].iter().enumerate() {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F30 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F30 case {i} should stay NotImplemented"
+            );
+        }
+        render_line(&thick).unwrap();
+    }
+
+    fn official_like_f31_marker() -> &'static str {
+        r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#
+    }
+
+    fn official_like_f31_s1() -> String {
+        line_ser(
+            0,
+            "F31S1",
+            &[
+                Some(20.0),
+                Some(40.0),
+                Some(60.0),
+                Some(40.0),
+                Some(20.0),
+                Some(50.0),
+                Some(30.0),
+                Some(70.0),
+            ],
+            official_like_f31_marker(),
+        )
+    }
+
+    fn official_like_f31_s2() -> String {
+        line_ser(
+            1,
+            "F31S2",
+            &[
+                Some(50.0),
+                Some(20.0),
+                Some(40.0),
+                Some(55.0),
+                Some(30.0),
+                Some(50.0),
+                Some(20.0),
+                Some(50.0),
+            ],
+            official_like_f31_marker(),
+        )
+    }
+
+    fn official_like_f31_line_xml(series: &str, wrapper_extra: &str) -> String {
+        official_like_f28_axes(&standard_line_xml(series, "").replacen(
+            r#"<c:axId val="1"/><c:axId val="2"/>
+      </c:lineChart>"#,
+            &format!(
+                "{wrapper_extra}<c:axId val=\"1\"/><c:axId val=\"2\"/>\n      </c:lineChart>"
+            ),
+            1,
+        ))
+    }
+
+    fn official_like_f31_area_xml(wrapper_extra: &str) -> String {
+        official_like_f28_axes(&standard_area_xml(&official_like_f31_s1(), ""))
+            .replacen(
+                r#"<c:axId val="1"/><c:axId val="2"/>
+      </c:areaChart>"#,
+                &format!(
+                    "{wrapper_extra}<c:axId val=\"1\"/><c:axId val=\"2\"/>\n      </c:areaChart>"
+                ),
+                1,
+            )
+            .replace(
+                r#"crossBetween val="between""#,
+                r#"crossBetween val="midCat""#,
+            )
+    }
+
+    #[test]
+    fn official_like_f31_drop_hilow_updown_export_and_paint_ink() {
+        let control = official_like_f31_line_xml(&official_like_f31_s1(), "");
+        let drop = official_like_f31_line_xml(&official_like_f31_s1(), "<c:dropLines/>");
+        let two = format!("{}{}", official_like_f31_s1(), official_like_f31_s2());
+        let hi_low = official_like_f31_line_xml(&two, "<c:hiLowLines/>");
+        let up_down = official_like_f31_line_xml(
+            &two,
+            r#"<c:upDownBars><c:gapWidth val="150"/><c:upBars/><c:downBars/></c:upDownBars>"#,
+        );
+        let all = official_like_f31_line_xml(
+            &two,
+            r#"<c:dropLines/><c:hiLowLines/><c:upDownBars><c:gapWidth val="150"/><c:upBars/><c:downBars/></c:upDownBars>"#,
+        );
+        let area_control = official_like_f31_area_xml("");
+        let area_drop = official_like_f31_area_xml("<c:dropLines/>");
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        let black = [0, 0, 0];
+        let mut pngs = Vec::new();
+        for (name, xml, second) in [
+            ("lineControl", &control, false),
+            ("lineDrop", &drop, false),
+            ("lineHiLow", &hi_low, true),
+            ("lineUpDown", &up_down, true),
+            ("lineAll", &all, true),
+            ("areaControl", &area_control, false),
+            ("areaDrop", &area_drop, false),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F31 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a1, 18) >= 20,
+                "official-like F31 {name} should paint the first series"
+            );
+            if second {
+                assert!(
+                    count_in(&rgb, w, 0, w, 0, h, a2, 18) >= 20,
+                    "official-like F31 {name} should paint the second series"
+                );
+            }
+            pngs.push((name, png, count_in(&rgb, w, 0, w, 0, h, black, 18)));
+        }
+        assert_ne!(pngs[1].1, pngs[0].1, "line dropLines must add ink");
+        assert!(
+            pngs[1].2 > pngs[0].2,
+            "line dropLines should add close-enough black stems; drop={} control={}",
+            pngs[1].2,
+            pngs[0].2
+        );
+        assert_ne!(pngs[2].1, pngs[0].1, "hiLowLines must add ink");
+        assert_ne!(pngs[3].1, pngs[0].1, "upDownBars must add ink");
+        assert_ne!(pngs[4].1, pngs[0].1, "combined decorations must add ink");
+        assert_ne!(pngs[6].1, pngs[5].1, "area dropLines must add ink");
+        assert!(
+            pngs[6].2 > pngs[5].2,
+            "area dropLines should add close-enough black stems; drop={} control={}",
+            pngs[6].2,
+            pngs[5].2
+        );
+    }
+
+    #[test]
+    fn leftover_f31_variants_without_official_gold_stay_not_implemented() {
+        let s1 = official_like_f31_s1();
+        let styled_drop = official_like_f31_line_xml(
+            &s1,
+            r#"<c:dropLines><c:spPr><a:ln w="76200"/></c:spPr></c:dropLines>"#,
+        );
+        let styled_hi = official_like_f31_line_xml(
+            &s1,
+            r#"<c:hiLowLines><c:spPr><a:ln w="76200"/></c:spPr></c:hiLowLines>"#,
+        );
+        let missing_bars = official_like_f31_line_xml(
+            &s1,
+            r#"<c:upDownBars><c:gapWidth val="150"/></c:upDownBars>"#,
+        );
+        let styled_up = official_like_f31_line_xml(
+            &format!("{}{}", official_like_f31_s1(), official_like_f31_s2()),
+            r#"<c:upDownBars><c:gapWidth val="150"/><c:upBars><c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr></c:upBars><c:downBars/></c:upDownBars>"#,
+        );
+        let stacked = official_like_f31_line_xml(&s1, "<c:dropLines/>").replace(
+            r#"grouping val="standard""#,
+            r#"grouping val="stacked""#,
+        );
+        let scatter = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:marker><c:symbol val="none"/></c:marker>"#,
+        ).replacen(
+            "</c:scatterChart>",
+            "<c:dropLines/></c:scatterChart>",
+            1,
+        );
+        for (i, xml) in [styled_drop, styled_hi, missing_bars, styled_up, stacked, scatter]
+            .iter()
+            .enumerate()
+        {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F31 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F31 case {i} should stay NotImplemented"
+            );
+        }
+        render_line(&official_like_f31_line_xml(&s1, "<c:dropLines/>")).unwrap();
+    }
+
+    fn official_like_f32_values() -> [Option<f64>; 8] {
+        [
+            Some(20.0),
+            Some(40.0),
+            Some(60.0),
+            Some(40.0),
+            Some(20.0),
+            Some(50.0),
+            Some(30.0),
+            Some(70.0),
+        ]
+    }
+
+    fn official_like_f32_dpt_marker() -> &'static str {
+        r#"<c:dPt><c:idx val="3"/><c:marker><c:symbol val="diamond"/><c:size val="10"/></c:marker><c:bubble3D val="0"/></c:dPt>"#
+    }
+
+    fn official_like_f32_area_dpt() -> &'static str {
+        r#"<c:dPt><c:idx val="3"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr></c:dPt>"#
+    }
+
+    fn official_like_f32_trendline() -> &'static str {
+        r#"<c:trendline><c:trendlineType val="linear"/><c:dispRSqr val="0"/><c:dispEq val="0"/></c:trendline>"#
+    }
+
+    fn official_like_f32_err_bars() -> &'static str {
+        r#"<c:errBars><c:errDir val="y"/><c:errBarType val="both"/><c:errValType val="fixedVal"/><c:noEndCap val="0"/><c:val val="10"/></c:errBars>"#
+    }
+
+    fn official_like_f32_line_xml(extra: &str) -> String {
+        official_like_f28_axes(&standard_line_xml(
+            &line_ser(
+                0,
+                "F32S1",
+                &official_like_f32_values(),
+                &format!(
+                    r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>{extra}"#
+                ),
+            ),
+            "",
+        ))
+    }
+
+    fn official_like_f32_area_xml(extra: &str) -> String {
+        official_like_f28_axes(&standard_area_xml(
+            &line_ser(0, "F32S1", &official_like_f32_values(), extra),
+            "",
+        ))
+        .replace(
+            r#"crossBetween val="between""#,
+            r#"crossBetween val="midCat""#,
+        )
+    }
+
+    fn official_like_f32_scatter_xml(extra: &str) -> String {
+        let xs = [
+            Some(1.0),
+            Some(2.0),
+            Some(3.0),
+            Some(4.0),
+            Some(5.0),
+            Some(6.0),
+            Some(7.0),
+            Some(8.0),
+        ];
+        official_like_f28_axes(&scatter_xml(
+            "lineMarker",
+            &scatter_ser(0, "F32S1", &xs, &official_like_f32_values(), extra),
+            "",
+        ))
+        .replace(
+            r#"<c:orientation val="minMax"/>"#,
+            r#"<c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/>"#,
+        )
+        .replace(
+            "</c:valAx>",
+            r#"<c:majorUnit val="20"/><c:crossBetween val="midCat"/></c:valAx>"#,
+        )
+    }
+
+    #[test]
+    fn official_like_f32_dpt_trendline_errbars_export_and_paint_ink() {
+        let line_control = official_like_f32_line_xml("");
+        let line_dpt = official_like_f32_line_xml(official_like_f32_dpt_marker());
+        let line_trend = official_like_f32_line_xml(official_like_f32_trendline());
+        let line_err = official_like_f32_line_xml(official_like_f32_err_bars());
+        let scatter_control = official_like_f32_scatter_xml(
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#,
+        );
+        let scatter_dpt = official_like_f32_scatter_xml(&format!(
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>{}"#,
+            official_like_f32_dpt_marker()
+        ));
+        let scatter_trend = official_like_f32_scatter_xml(&format!(
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>{}"#,
+            official_like_f32_trendline()
+        ));
+        let scatter_err = official_like_f32_scatter_xml(&format!(
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>{}"#,
+            official_like_f32_err_bars()
+        ));
+        let area_control = official_like_f32_area_xml("");
+        let area_dpt = official_like_f32_area_xml(official_like_f32_area_dpt());
+        let area_trend = official_like_f32_area_xml(official_like_f32_trendline());
+        let area_err = official_like_f32_area_xml(official_like_f32_err_bars());
+        let a1 = FALLBACK_ACCENTS[0];
+        let black = [0, 0, 0];
+
+        let mut pngs = Vec::new();
+        for (name, xml) in [
+            ("lineControl", &line_control),
+            ("lineDpt", &line_dpt),
+            ("lineTrend", &line_trend),
+            ("lineErr", &line_err),
+            ("scatterControl", &scatter_control),
+            ("scatterDpt", &scatter_dpt),
+            ("scatterTrend", &scatter_trend),
+            ("scatterErr", &scatter_err),
+            ("areaControl", &area_control),
+            ("areaDpt", &area_dpt),
+            ("areaTrend", &area_trend),
+            ("areaErr", &area_err),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F32 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a1, 18) >= 20,
+                "official-like F32 {name} should paint the series"
+            );
+            pngs.push((
+                name,
+                png,
+                count_in(&rgb, w, 0, w, 0, h, a1, 18),
+                count_in(&rgb, w, 0, w, 0, h, black, 18),
+            ));
+        }
+
+        assert_ne!(pngs[1].1, pngs[0].1, "line dPt marker must add ink");
+        assert!(
+            pngs[1].2 > pngs[0].2,
+            "line dPt diamond should reuse the series color; dpt={} control={}",
+            pngs[1].2,
+            pngs[0].2
+        );
+        assert_ne!(pngs[2].1, pngs[0].1, "line linear trendline must add ink");
+        assert!(
+            pngs[2].3 > pngs[0].3,
+            "line trendline should add close-enough black ink; trend={} control={}",
+            pngs[2].3,
+            pngs[0].3
+        );
+        assert_ne!(pngs[3].1, pngs[0].1, "line error bars must add ink");
+        assert!(
+            pngs[3].3 > pngs[0].3,
+            "line error bars should add close-enough black stems; err={} control={}",
+            pngs[3].3,
+            pngs[0].3
+        );
+
+        assert_ne!(pngs[5].1, pngs[4].1, "scatter dPt marker must add ink");
+        assert!(
+            pngs[5].2 > pngs[4].2,
+            "scatter dPt diamond should reuse the series color; dpt={} control={}",
+            pngs[5].2,
+            pngs[4].2
+        );
+        assert_ne!(pngs[6].1, pngs[4].1, "scatter linear trendline must add ink");
+        assert!(
+            pngs[6].3 > pngs[4].3,
+            "scatter trendline should add close-enough black ink; trend={} control={}",
+            pngs[6].3,
+            pngs[4].3
+        );
+        assert_ne!(pngs[7].1, pngs[4].1, "scatter error bars must add ink");
+        assert!(
+            pngs[7].3 > pngs[4].3,
+            "scatter error bars should add close-enough black stems; err={} control={}",
+            pngs[7].3,
+            pngs[4].3
+        );
+
+        // Official area dPt fill is accepted so the chart exports, but the
+        // official matrix shows no distinct point-region paint to lock.
+        let _ = pngs[9].1;
+        assert_ne!(pngs[10].1, pngs[8].1, "area linear trendline must add ink");
+        assert!(
+            pngs[10].3 > pngs[8].3,
+            "area trendline should add close-enough black ink; trend={} control={}",
+            pngs[10].3,
+            pngs[8].3
+        );
+        assert_ne!(pngs[11].1, pngs[8].1, "area error bars must add ink");
+        assert!(
+            pngs[11].3 > pngs[8].3,
+            "area error bars should add close-enough black stems; err={} control={}",
+            pngs[11].3,
+            pngs[8].3
+        );
+
+        // General noEndCap=1 and plus-only encodings still export (caps off /
+        // one-sided), without locking a unique official cap table.
+        render_line(&official_like_f32_line_xml(
+            r#"<c:errBars><c:errDir val="y"/><c:errBarType val="plus"/><c:errValType val="fixedVal"/><c:noEndCap val="1"/><c:val val="10"/></c:errBars>"#,
+        ))
+        .expect("plus/noEndCap official-like error bars must export");
+    }
+
+    #[test]
+    fn leftover_f32_variants_without_official_gold_stay_not_implemented() {
+        let styled_trend = official_like_f32_line_xml(
+            r#"<c:trendline><c:trendlineType val="linear"/><c:spPr><a:ln w="76200"/></c:spPr></c:trendline>"#,
+        );
+        let exp_trend = official_like_f32_line_xml(
+            r#"<c:trendline><c:trendlineType val="exp"/><c:dispRSqr val="0"/><c:dispEq val="0"/></c:trendline>"#,
+        );
+        let with_eq = official_like_f32_line_xml(
+            r#"<c:trendline><c:trendlineType val="linear"/><c:dispRSqr val="0"/><c:dispEq val="1"/></c:trendline>"#,
+        );
+        let extended = official_like_f32_line_xml(
+            r#"<c:trendline><c:trendlineType val="linear"/><c:forward val="1"/><c:dispRSqr val="0"/><c:dispEq val="0"/></c:trendline>"#,
+        );
+        let styled_err = official_like_f32_line_xml(
+            r#"<c:errBars><c:errDir val="y"/><c:errBarType val="both"/><c:errValType val="fixedVal"/><c:noEndCap val="0"/><c:val val="10"/><c:spPr><a:ln w="76200"/></c:spPr></c:errBars>"#,
+        );
+        let pct_err = official_like_f32_line_xml(
+            r#"<c:errBars><c:errDir val="y"/><c:errBarType val="both"/><c:errValType val="percentage"/><c:noEndCap val="0"/><c:val val="10"/></c:errBars>"#,
+        );
+        let x_err = official_like_f32_line_xml(
+            r#"<c:errBars><c:errDir val="x"/><c:errBarType val="both"/><c:errValType val="fixedVal"/><c:noEndCap val="0"/><c:val val="10"/></c:errBars>"#,
+        );
+        let default_dpt = official_like_f32_line_xml(
+            r#"<c:dPt><c:idx val="3"/><c:bubble3D val="0"/></c:dPt>"#,
+        );
+        let bubble3d = official_like_f32_line_xml(
+            r#"<c:dPt><c:idx val="3"/><c:marker><c:symbol val="diamond"/><c:size val="10"/></c:marker><c:bubble3D val="1"/></c:dPt>"#,
+        );
+        let stacked = official_like_f32_line_xml(official_like_f32_trendline()).replace(
+            r#"grouping val="standard""#,
+            r#"grouping val="stacked""#,
+        );
+        for (i, xml) in [
+            styled_trend,
+            exp_trend,
+            with_eq,
+            extended,
+            styled_err,
+            pct_err,
+            x_err,
+            default_dpt,
+            bubble3d,
+            stacked,
+        ]
+        .iter()
+        .enumerate()
+        {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F32 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F32 case {i} should stay NotImplemented"
+            );
+        }
+        render_line(&official_like_f32_line_xml(official_like_f32_trendline())).unwrap();
+    }
+
+
+    fn official_like_f33_area_xml(extra: &str) -> String {
+        official_like_f28_axes(&standard_area_xml(
+            &line_ser(0, "F33S1", &official_like_f32_values(), extra),
+            "",
+        ))
+        .replace(
+            r#"crossBetween val="between""#,
+            r#"crossBetween val="midCat""#,
+        )
+    }
+
+    fn official_like_f33_nofill() -> &'static str {
+        r#"<c:spPr><a:noFill/><a:extLst><a:ext uri="{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}"><a14:hiddenFill xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"><a:solidFill><a:srgbClr val="156082"/></a:solidFill></a14:hiddenFill></a:ext></a:extLst></c:spPr>"#
+    }
+
+    fn official_like_f33_alpha() -> &'static str {
+        r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#
+    }
+
+    fn official_like_f33_pattern() -> &'static str {
+        r#"<c:spPr><a:pattFill prst="pct10"><a:fgClr><a:srgbClr val="156082"/></a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr></a:pattFill></c:spPr>"#
+    }
+
+    #[test]
+    fn official_like_f33_area_nofill_alpha_pattern_export_and_paint() {
+        let control = official_like_f33_area_xml("");
+        let marker_like = official_like_f33_area_xml("");
+        let no_fill = official_like_f33_area_xml(official_like_f33_nofill());
+        let alpha = official_like_f33_area_xml(official_like_f33_alpha());
+        let pattern = official_like_f33_area_xml(official_like_f33_pattern());
+        let a1 = [0x15, 0x60, 0x82];
+        let white = [255, 255, 255];
+        let mut pngs = Vec::new();
+        for (name, xml) in [
+            ("areaControl", &control),
+            ("areaMarkerXml", &marker_like),
+            ("areaNoFill", &no_fill),
+            ("areaTransparent", &alpha),
+            ("areaPattern", &pattern),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F33 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            pngs.push((
+                name,
+                png,
+                count_in(&rgb, w, 0, w, 0, h, a1, 18),
+                count_in(&rgb, w, 0, w, 0, h, white, 2),
+            ));
+        }
+        assert!(
+            pngs[0].2 >= 80,
+            "standard midCat area control should paint the series fill"
+        );
+        // Official COM markers were not serialized; the XML matches the
+        // control encoding and already exports on the existing area path.
+        assert_eq!(
+            pngs[1].1, pngs[0].1,
+            "unserialized area marker XML is the existing midCat area path"
+        );
+        assert_ne!(pngs[2].1, pngs[0].1, "area noFill must change the image");
+        assert!(
+            pngs[2].2 < pngs[0].2,
+            "area noFill should not paint the hidden solid; nofill={} control={}",
+            pngs[2].2,
+            pngs[0].2
+        );
+        assert_ne!(pngs[3].1, pngs[0].1, "area straight alpha must change the image");
+        assert_ne!(pngs[4].1, pngs[0].1, "area pattFill must change the image");
+        assert!(
+            pngs[4].2 >= 20,
+            "area pct10 pattern should paint some foreground ink"
+        );
+        assert!(
+            pngs[4].3 >= 20,
+            "area pct10 pattern should paint some background white"
+        );
+    }
+
+    #[test]
+    fn leftover_f33_variants_without_official_gold_stay_not_implemented() {
+        let stacked_alpha = official_like_f33_area_xml(official_like_f33_alpha()).replace(
+            r#"grouping val="standard""#,
+            r#"grouping val="stacked""#,
+        );
+        let stacked_nofill = official_like_f33_area_xml(official_like_f33_nofill()).replace(
+            r#"grouping val="standard""#,
+            r#"grouping val="stacked""#,
+        );
+        let marker = official_like_f33_area_xml(
+            r#"<c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>"#,
+        );
+        let grad = official_like_f33_area_xml(
+            r#"<c:spPr><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="156082"/></a:gs><a:gs pos="100000"><a:srgbClr val="FFFFFF"/></a:gs></a:gsLst></a:gradFill></c:spPr>"#,
+        );
+        let alpha_mod = official_like_f33_area_xml(
+            r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alphaMod val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
+        );
+        for (i, xml) in [stacked_alpha, stacked_nofill, marker, grad, alpha_mod]
+            .iter()
+            .enumerate()
+        {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F33 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F33 case {i} should stay NotImplemented"
+            );
+        }
+        render_line(&official_like_f33_area_xml(official_like_f33_nofill())).unwrap();
     }
 
     fn bar_space(plot_body: &str, chart_extra: &str, cat_orient: &str) -> String {
@@ -6387,6 +7756,35 @@
     }
 
     #[test]
+    fn clustered_bar_inend_and_general_decimals_export() {
+        let inend = bar_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(4.0), Some(6.0), Some(9.0)],
+                r#"<c:dLbls><c:dLblPos val="inEnd"/><c:showVal val="1"/></c:dLbls>"#,
+            ),
+            "",
+            "maxMin",
+            Some("bar"),
+        );
+        render_bar(&inend).expect("bar inEnd General integers should export");
+
+        let decimal = bar_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(4.5), Some(6.3), Some(9.1999999999999993)],
+                r#"<c:dLbls><c:dLblPos val="outEnd"/><c:showVal val="1"/></c:dLbls>"#,
+            ),
+            "",
+            "maxMin",
+            Some("bar"),
+        );
+        render_bar(&decimal).expect("bar General decimals should export");
+    }
+
+    #[test]
     fn clustered_bar_unsupported_inputs_stay_not_implemented() {
         let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0)], "");
         let two = format!(
@@ -6404,23 +7802,6 @@
             bar_xml(&ser, "", "maxMin", Some("bar")).replacen(
                 r#"grouping val="clustered""#,
                 r#"grouping val="percentStacked""#,
-                1,
-            ),
-            bar_xml(
-                &ser,
-                r#"<c:dispBlanksAs val="zero"/>"#,
-                "maxMin",
-                Some("bar"),
-            ),
-            bar_xml(
-                &ser,
-                r#"<c:dispBlanksAs val="span"/>"#,
-                "maxMin",
-                Some("bar"),
-            ),
-            bar_xml(&ser, "", "maxMin", Some("bar")).replacen(
-                r#"</c:barChart>"#,
-                r#"<c:dLbls><c:dLblPos val="inEnd"/><c:showVal val="1"/></c:dLbls></c:barChart>"#,
                 1,
             ),
             bar_xml(&two, "", "maxMin", Some("bar")).replacen(
@@ -6456,6 +7837,26 @@
                 "bar case {i} should stay NotImplemented"
             );
         }
+        // F13: unlabeled clustered bar dispBlanksAs=zero uses the same
+        // general rule as official column Chart.Export. A complete numeric
+        // cache is inert and must export.
+        render_bar(&bar_xml(
+            &ser,
+            r#"<c:dispBlanksAs val="zero"/>"#,
+            "maxMin",
+            Some("bar"),
+        ))
+        .expect("bar dispBlanksAs=zero with a complete numeric cache should export");
+        // F14: unlabeled clustered bar dispBlanksAs=span uses the same
+        // general rule as official column Chart.Export (do not synthesize
+        // a mid value). A complete numeric cache is inert and must export.
+        render_bar(&bar_xml(
+            &ser,
+            r#"<c:dispBlanksAs val="span"/>"#,
+            "maxMin",
+            Some("bar"),
+        ))
+        .expect("bar dispBlanksAs=span with a complete numeric cache should export");
         // 隐藏数据标签与空值缺口仍可画；gap 是缺省。
         render_bar(&bar_xml(
             &ser,
@@ -6487,6 +7888,108 @@
   </c:chart>
 </c:chartSpace>"#;
         render_bar(&col_ok).unwrap();
+    }
+
+    #[test]
+    fn column_and_bar_disp_blanks_as_zero_fill_true_blanks_and_skip_na() {
+        // Official F13 Chart.Export of clustered-column dispBlanksAs=zero
+        // exists. True blanks become 0 (same general rule as lines). A
+        // 0-height mark is not painted. #N/A is not a blank and stays
+        // None / unpainted. Other errors stay NI. Labeled blanks stay
+        // rejected so a showVal cannot silently disappear. Documented
+        // general rule, not a unique official-matrix lock.
+        let omitted = line_ser(0, "S1", &[Some(-4.0), None, Some(-9.0)], "");
+        let explicit = line_ser(0, "S1", &[Some(-4.0), Some(0.0), Some(-9.0)], "");
+        let zero_extra = r#"<c:dispBlanksAs val="zero"/>"#;
+        for dir in ["col", "bar"] {
+            let omitted_xml = bar_xml(&omitted, zero_extra, "maxMin", Some(dir));
+            let explicit_xml = bar_xml(&explicit, zero_extra, "maxMin", Some(dir));
+            let doc = crate::xml::parse(omitted_xml.as_bytes()).unwrap();
+            let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+                .unwrap();
+            assert_eq!(
+                chart.series[0].values,
+                vec![Some(-4.0), Some(0.0), Some(-9.0)],
+                "dispBlanksAs=zero must fill a true blank as 0 on {dir}"
+            );
+            let omitted_png = render_bar(&omitted_xml).unwrap();
+            let explicit_png = render_bar(&explicit_xml).unwrap();
+            assert_eq!(
+                omitted_png, explicit_png,
+                "unlabeled {dir} zero-filled blank must match an explicit 0"
+            );
+        }
+
+        let na = line_ser(0, "S1", &[Some(-4.0), Some(0.0), Some(-9.0)], "").replace(
+            r#"<c:pt idx="1"><c:v>0</c:v></c:pt>"#,
+            r#"<c:pt idx="1"><c:v>#N/A</c:v></c:pt>"#,
+        );
+        let na_xml = bar_xml(&na, zero_extra, "maxMin", Some("col"));
+        let na_doc = crate::xml::parse(na_xml.as_bytes()).unwrap();
+        let na_chart =
+            read_chart(&na_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(
+            na_chart.series[0].values,
+            vec![Some(-4.0), None, Some(-9.0)],
+            "column #N/A must not be filled as 0 under dispBlanksAs=zero"
+        );
+        render_bar(&na_xml).expect("unlabeled column #N/A + zero must export");
+
+        let div = na.replace("#N/A", "#DIV/0!");
+        assert!(
+            render_bar(&bar_xml(&div, zero_extra, "maxMin", Some("col"))).is_err(),
+            "column #DIV/0! + dispBlanksAs=zero stays NotImplemented"
+        );
+        assert!(
+            render_bar(&bar_xml(&div, zero_extra, "maxMin", Some("bar"))).is_err(),
+            "bar #DIV/0! + dispBlanksAs=zero stays NotImplemented"
+        );
+    }
+
+    #[test]
+    fn column_and_bar_disp_blanks_as_span_skips_blanks_and_does_not_fill_zero() {
+        // Official F14 Chart.Export of clustered-column dispBlanksAs=span
+        // exists and has no mid column. Span does not synthesize a mid
+        // value: omitted blanks stay None (not filled as 0, unlike zero
+        // mode) and are skipped. Unlabeled official gold cannot uniquely
+        // distinguish that from gap. Documented general rule, not a unique
+        // official-matrix lock. Labeled blanks stay rejected.
+        let omitted = line_ser(0, "S1", &[Some(4.0), None, Some(9.0)], "");
+        let span_extra = r#"<c:dispBlanksAs val="span"/>"#;
+        let gap_extra = r#"<c:dispBlanksAs val="gap"/>"#;
+        for dir in ["col", "bar"] {
+            let span_xml = bar_xml(&omitted, span_extra, "maxMin", Some(dir));
+            let gap_xml = bar_xml(&omitted, gap_extra, "maxMin", Some(dir));
+            let doc = crate::xml::parse(span_xml.as_bytes()).unwrap();
+            let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+                .unwrap();
+            assert_eq!(
+                chart.series[0].values,
+                vec![Some(4.0), None, Some(9.0)],
+                "dispBlanksAs=span must not fill a true blank as 0 on {dir}"
+            );
+            let span_png = render_bar(&span_xml).unwrap();
+            let gap_png = render_bar(&gap_xml).unwrap();
+            assert_eq!(
+                span_png, gap_png,
+                "unlabeled {dir} span must skip the blank like gap"
+            );
+        }
+
+        let na = line_ser(0, "S1", &[Some(4.0), Some(0.0), Some(9.0)], "").replace(
+            r#"<c:pt idx="1"><c:v>0</c:v></c:pt>"#,
+            r#"<c:pt idx="1"><c:v>#N/A</c:v></c:pt>"#,
+        );
+        let na_xml = bar_xml(&na, span_extra, "maxMin", Some("col"));
+        let na_doc = crate::xml::parse(na_xml.as_bytes()).unwrap();
+        let na_chart =
+            read_chart(&na_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(
+            na_chart.series[0].values,
+            vec![Some(4.0), None, Some(9.0)],
+            "column #N/A must not be filled as 0 under dispBlanksAs=span"
+        );
+        render_bar(&na_xml).expect("unlabeled column #N/A + span must export");
     }
 
     fn area_space(plot_body: &str, chart_extra: &str) -> String {
@@ -6749,27 +8252,11 @@
                 r#"grouping val="standard""#,
                 r#"grouping val="percentStacked""#,
             ),
-            base.replace("<c:areaChart>", "<c:area3DChart>")
-                .replace("</c:areaChart>", "</c:area3DChart>"),
-            base.replace(
-                r#"crossBetween val="between""#,
-                r#"crossBetween val="midCat""#,
-            ),
             base.replacen(r#"varyColors val="0""#, r#"varyColors val="1""#, 1),
             base.replacen(
                 r#"</c:areaChart>"#,
                 r#"<c:dLbls><c:showVal val="1"/></c:dLbls></c:areaChart>"#,
                 1,
-            ),
-            base.replacen(r#"</c:areaChart>"#, r#"<c:dropLines/></c:areaChart>"#, 1),
-            standard_area_xml(
-                &line_ser(
-                    0,
-                    "S1",
-                    &[Some(1.0), Some(2.0)],
-                    r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
-                ),
-                "",
             ),
             standard_area_xml(
                 &line_ser(
@@ -6780,6 +8267,18 @@
                 ),
                 "",
             ),
+            // Stacked plus a translucent fill stays NI (official F33 gold is
+            // standard / midCat only).
+            standard_area_xml(
+                &line_ser(
+                    0,
+                    "S1",
+                    &[Some(1.0), Some(2.0)],
+                    r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
+                ),
+                "",
+            )
+            .replace(r#"grouping val="standard""#, r#"grouping val="stacked""#),
             area_space(
                 r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser>
           <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
@@ -6798,6 +8297,15 @@
                 "area case {i} should stay NotImplemented"
             );
         }
+        // Official Excel 16 standard area writes midCat (first/last categories
+        // on the plot edges). That encoding must export, not stay NI.
+        render_area(
+            &base.replace(
+                r#"crossBetween val="between""#,
+                r#"crossBetween val="midCat""#,
+            ),
+        )
+        .expect("standard area midCat must export");
         // Omitted grouping, gap blanks, hidden labels, and marker none stay supported.
         render_area(
             &area_space(
@@ -6941,13 +8449,41 @@
                 );
             }
         }
-        for fill in [
-            "<a:solidFill><a:srgbClr val='FFFF00'><a:alpha val='50000'/></a:srgbClr></a:solidFill>",
-            "<a:gradFill><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFF00'/></a:gs><a:gs pos='100000'><a:srgbClr val='0000FF'/></a:gs></a:gsLst><a:lin ang='0'/></a:gradFill>",
-        ] {
-            let xml=standard_pie_xml(&ser,"","").replace("<c:plotArea>",&format!("<c:plotArea><c:spPr>{fill}</c:spPr>"));
-            assert!(render_pie(&xml).is_err(),"unlocked pie plot fill must remain NI");
-        }
+        // Translucent and linear plot fills are painted on the same fractional
+        // square as the opaque solid case. Diagonal/path fills use close-enough
+        // geometry so they export; residuals stay on the review page.
+        let grad = "<a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFF00'/></a:gs><a:gs pos='100000'><a:srgbClr val='0000FF'/></a:gs></a:gsLst><a:lin ang='5400000' scaled='1'/><a:tileRect/></a:gradFill>";
+        let xml = standard_pie_xml(&ser, "", "").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            "",
+        ).replace("<c:plotArea>", &format!("<c:plotArea><c:spPr>{grad}</c:spPr>"));
+        let png = render_pie(&xml).expect("locked vertical pie plot gradient must export");
+        let (w, _h, rgb) = decode_rgb(&png);
+        let rect = pie_plot_bounds(576.0, 336.0, 0.0, 0.0, RenderDpi::DEFAULT).unwrap();
+        // Same inset as the opaque solid corner: mid-top sits inside a slice.
+        let x = rect.x.ceil() as u32 + 2;
+        let y_top = rect.y.ceil() as u32 + 2;
+        let y_bot = (rect.y + rect.h).floor() as u32 - 2;
+        let top = sample_rgb(&rgb, w, x, y_top);
+        let bot = sample_rgb(&rgb, w, x, y_bot);
+        assert!(top[0] > 200 && top[2] < 80, "top of plot square should be yellow, got {top:?}");
+        assert!(bot[2] > 200 && bot[0] < 80, "bottom of plot square should be blue, got {bot:?}");
+        let alpha = "<a:solidFill><a:srgbClr val='FFFF00'><a:alpha val='50000'/></a:srgbClr></a:solidFill>";
+        let xml = standard_pie_xml(&ser, "", "").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            "",
+        ).replace("<c:plotArea>", &format!("<c:plotArea><c:spPr>{alpha}</c:spPr>"));
+        let png = render_pie(&xml).expect("locked translucent pie plot fill must export");
+        let (_, _, rgb) = decode_rgb(&png);
+        let corner = sample_rgb(&rgb, w, (rect.x + 2.0) as u32, (rect.y + 2.0) as u32);
+        // Straight 50% yellow over the default white chart area.
+        assert!(
+            corner[0] > 200 && corner[1] > 200 && corner[2] < 160,
+            "translucent yellow plot corner, got {corner:?}"
+        );
+        let diag = "<a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFF00'/></a:gs><a:gs pos='100000'><a:srgbClr val='0000FF'/></a:gs></a:gsLst><a:lin ang='2700000' scaled='1'/><a:tileRect/></a:gradFill>";
+        let xml = standard_pie_xml(&ser, "", "").replace("<c:plotArea>", &format!("<c:plotArea><c:spPr>{diag}</c:spPr>"));
+        render_pie(&xml).expect("close-enough diagonal pie plot fill must export");
     }
 
     #[test]
@@ -7520,15 +9056,726 @@
         );
     }
 
+    fn official_like_f34_s1() -> String {
+        line_ser(
+            0,
+            "F34S1",
+            &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)],
+            r#"<c:idx val="0"/>"#,
+        )
+    }
+
+    fn official_like_f34_s2() -> String {
+        line_ser(
+            1,
+            "F34S2",
+            &[Some(25.0), Some(15.0), Some(40.0), Some(20.0)],
+            r#"<c:idx val="1"/>"#,
+        )
+    }
+
+    fn official_like_f34_s3() -> String {
+        line_ser(
+            2,
+            "F34S3",
+            &[Some(5.0), Some(35.0), Some(15.0), Some(45.0)],
+            r#"<c:idx val="2"/>"#,
+        )
+    }
+
+    fn official_like_f34_pie_xml(series: &str) -> String {
+        standard_pie_xml(
+            series,
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            r#"<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/><c:showLeaderLines val="1"/></c:dLbls><c:firstSliceAng val="0"/>"#,
+        )
+    }
+
+    #[test]
+    fn official_like_f34_multi_series_pie_paints_lowest_order_series() {
+        let control = official_like_f34_pie_xml(&official_like_f34_s1());
+        let two = official_like_f34_pie_xml(&format!(
+            "{}{}",
+            official_like_f34_s1(),
+            official_like_f34_s2()
+        ));
+        let three = official_like_f34_pie_xml(&format!(
+            "{}{}{}",
+            official_like_f34_s1(),
+            official_like_f34_s2(),
+            official_like_f34_s3()
+        ));
+        // Second series written first in the wrapper, but c:order=0 is S1.
+        let swapped = official_like_f34_pie_xml(&format!(
+            "{}{}",
+            official_like_f34_s2(),
+            official_like_f34_s1()
+        ));
+        let s2_only = official_like_f34_pie_xml(&official_like_f34_s2());
+        let s3_only = official_like_f34_pie_xml(&official_like_f34_s3());
+        let control_png = render_pie(&control).expect("official-like F34 pieControl must export");
+        let two_png = render_pie(&two).expect("official-like F34 two-series pie must export");
+        let three_png = render_pie(&three).expect("official-like F34 three-series pie must export");
+        let swapped_png =
+            render_pie(&swapped).expect("official-like F34 swapped-document-order pie must export");
+        let s2_png = render_pie(&s2_only).expect("single S2 pie must export");
+        let s3_png = render_pie(&s3_only).expect("single S3 pie must export");
+        assert_eq!(
+            two_png, control_png,
+            "two-series pie must paint the lowest-order series, not a later series"
+        );
+        assert_eq!(
+            three_png, control_png,
+            "three-series pie must paint the lowest-order series, not a later series"
+        );
+        assert_eq!(
+            swapped_png, control_png,
+            "document order must not override a lower c:order"
+        );
+        assert_ne!(s2_png, control_png, "S2 proportions must differ from S1");
+        assert_ne!(s3_png, control_png, "S3 proportions must differ from S1");
+    }
+
+    #[test]
+    fn leftover_f34_variants_without_official_gold_stay_not_implemented() {
+        let s1 = official_like_f34_s1();
+        // A second series with a visible value label is outside the official
+        // F34 matrix (chart-level labels stay hidden).
+        let labeled = official_like_f34_pie_xml(&format!(
+            "{}{}",
+            s1,
+            line_ser(
+                1,
+                "F34S2",
+                &[Some(25.0), Some(15.0), Some(40.0), Some(20.0)],
+                r#"<c:idx val="1"/><c:dLbls><c:showVal val="1"/></c:dLbls>"#,
+            )
+        ));
+        let err = render_pie(&labeled).expect_err("labeled extra pie series should stay NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+        // ofPie / showVal / non-right legend remain covered by existing NI tests.
+        render_pie(&official_like_f34_pie_xml(&format!(
+            "{}{}",
+            official_like_f34_s1(),
+            official_like_f34_s2()
+        )))
+        .unwrap();
+    }
+
+    fn official_like_f38_lin(ang: &str) -> String {
+        format!(
+            r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="{ang}" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#
+        )
+    }
+
+    fn official_like_f38_ser(extra: &str) -> String {
+        line_ser(
+            0,
+            "F38S1",
+            &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)],
+            extra,
+        )
+    }
+
+    fn official_like_f38_pie_xml(extra: &str) -> String {
+        standard_pie_xml(
+            &official_like_f38_ser(extra),
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            r#"<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/><c:showLeaderLines val="1"/></c:dLbls><c:firstSliceAng val="0"/>"#,
+        )
+    }
+
+    fn f38_is_grad_red(px: [u8; 3]) -> bool {
+        px[0] >= 160 && (px[0] as u16) > (px[1] as u16) + 80 && (px[0] as u16) > (px[2] as u16) + 80
+    }
+
+    fn f38_is_grad_blue(px: [u8; 3]) -> bool {
+        px[2] >= 160 && (px[2] as u16) > (px[1] as u16) + 80 && (px[2] as u16) > (px[0] as u16) + 80
+    }
+
+    fn f38_is_grad_field(px: [u8; 3]) -> bool {
+        f38_is_grad_red(px)
+            || f38_is_grad_blue(px)
+            || (px[1] <= 100 && px[0] >= 40 && px[2] >= 40)
+    }
+
+    fn f38_field_bbox(rgb: &[u8], w: u32, h: u32) -> (usize, usize, usize, usize) {
+        // Title/legend residuals stay on the review page; the bbox of the
+        // red/blue field is only a test probe of the pie square, not a
+        // production coordinate fudge.
+        let mut min_x = w as usize;
+        let mut min_y = h as usize;
+        let mut max_x = 0usize;
+        let mut max_y = 0usize;
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let i = (y * w as usize + x) * 3;
+                let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+                if f38_is_grad_field(px) {
+                    min_x = min_x.min(x);
+                    min_y = min_y.min(y);
+                    max_x = max_x.max(x + 1);
+                    max_y = max_y.max(y + 1);
+                }
+            }
+        }
+        (min_x, min_y, max_x, max_y)
+    }
+
+    fn f38_quad_counts(rgb: &[u8], w: u32, h: u32) -> ((usize, usize), (usize, usize), (usize, usize), (usize, usize)) {
+        let (x0, y0, x1, y1) = f38_field_bbox(rgb, w, h);
+        // Split through the field-pixel centroid so a small legend key on
+        // the right cannot pull a bbox midpoint into the pie's blue half.
+        let mut sx = 0u64;
+        let mut sy = 0u64;
+        let mut n = 0u64;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = (y * w as usize + x) * 3;
+                let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+                if f38_is_grad_field(px) {
+                    sx += x as u64;
+                    sy += y as u64;
+                    n += 1;
+                }
+            }
+        }
+        let mid_x = if n == 0 { (x0 + x1) / 2 } else { (sx / n) as usize };
+        let mid_y = if n == 0 { (y0 + y1) / 2 } else { (sy / n) as usize };
+        let mut red_top = 0usize;
+        let mut red_bot = 0usize;
+        let mut red_left = 0usize;
+        let mut red_right = 0usize;
+        let mut blue_top = 0usize;
+        let mut blue_bot = 0usize;
+        let mut blue_left = 0usize;
+        let mut blue_right = 0usize;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = (y * w as usize + x) * 3;
+                let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+                if f38_is_grad_red(px) {
+                    if y < mid_y {
+                        red_top += 1;
+                    } else {
+                        red_bot += 1;
+                    }
+                    if x < mid_x {
+                        red_left += 1;
+                    } else {
+                        red_right += 1;
+                    }
+                } else if f38_is_grad_blue(px) {
+                    if y < mid_y {
+                        blue_top += 1;
+                    } else {
+                        blue_bot += 1;
+                    }
+                    if x < mid_x {
+                        blue_left += 1;
+                    } else {
+                        blue_right += 1;
+                    }
+                }
+            }
+        }
+        (
+            (red_top, red_bot),
+            (blue_top, blue_bot),
+            (red_left, red_right),
+            (blue_left, blue_right),
+        )
+    }
+
+    #[test]
+    fn official_like_f38_series_and_dpt_linear_grads_export_and_paint() {
+        let control = official_like_f38_pie_xml("");
+        let ser_lin_h = official_like_f38_pie_xml(&official_like_f38_lin("5400000"));
+        let ser_lin_v = official_like_f38_pie_xml(&official_like_f38_lin("0"));
+        let pt_lin_h = official_like_f38_pie_xml(&format!(
+            r#"<c:dPt><c:idx val="0"/><c:bubble3D val="0"/>{}</c:dPt>"#,
+            official_like_f38_lin("5400000")
+        ));
+        let ser_solid = official_like_f38_pie_xml(
+            r#"<c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr>"#,
+        );
+        let control_png =
+            render_pie(&control).expect("official-like F38 pieControl must export");
+        let lin_h_png =
+            render_pie(&ser_lin_h).expect("official-like F38 series LinH must export");
+        let lin_v_png =
+            render_pie(&ser_lin_v).expect("official-like F38 series LinV must export");
+        let pt_png =
+            render_pie(&pt_lin_h).expect("official-like F38 dPt LinH must export");
+        let solid_png =
+            render_pie(&ser_solid).expect("official-like F38 series solid must still export");
+        assert_ne!(lin_h_png, control_png, "series LinH must change the pie");
+        assert_ne!(lin_v_png, control_png, "series LinV must change the pie");
+        assert_ne!(lin_h_png, lin_v_png, "LinH and LinV must not paint the same field");
+        assert_ne!(lin_h_png, solid_png, "LinH must not collapse to a solid first stop");
+        assert_ne!(pt_png, control_png, "dPt LinH must change the first slice");
+        assert_ne!(pt_png, lin_h_png, "dPt LinH must not paint every slice");
+
+        let (w_h, h_h, rgb_h) = png_rgb(&lin_h_png);
+        let ((red_top, red_bot), (blue_top, blue_bot), _, _) = f38_quad_counts(&rgb_h, w_h, h_h);
+        assert!(
+            red_top > red_bot * 2 && red_top >= 80,
+            "series LinH (ang=5400000) must keep red toward the top of the pie square, got red top={red_top} bot={red_bot}"
+        );
+        assert!(
+            blue_bot > blue_top * 2 && blue_bot >= 80,
+            "series LinH (ang=5400000) must keep blue toward the bottom of the pie square, got blue top={blue_top} bot={blue_bot}"
+        );
+
+        let (w_v, h_v, rgb_v) = png_rgb(&lin_v_png);
+        let (_, _, (red_left, red_right), (blue_left, blue_right)) = f38_quad_counts(&rgb_v, w_v, h_v);
+        assert!(
+            red_left > red_right * 2 && red_left >= 80,
+            "series LinV (ang=0) must keep red toward the left of the pie square, got red left={red_left} right={red_right}"
+        );
+        assert!(
+            blue_right > blue_left * 2 && blue_right >= 80,
+            "series LinV (ang=0) must keep blue toward the right of the pie square, got blue left={blue_left} right={blue_right}"
+        );
+
+        let (w_p, h_p, rgb_p) = png_rgb(&pt_png);
+        let (w_c, h_c, rgb_c) = png_rgb(&control_png);
+        assert_eq!((w_p, h_p), (w_c, h_c));
+        let exact = |rgb: &[u8], w: u32, h: u32, color: [u8; 3]| {
+            let mut n = 0usize;
+            for i in 0..(w * h) as usize {
+                if rgb[i * 3..i * 3 + 3] == color {
+                    n += 1;
+                }
+            }
+            n
+        };
+        // First slice (idx 0, accent 0) is overridden; later accent slices remain.
+        assert!(
+            exact(&rgb_p, w_p, h_p, FALLBACK_ACCENTS[0]) < 40,
+            "dPt LinH must replace the first accent slice"
+        );
+        for accent in &FALLBACK_ACCENTS[1..4] {
+            assert!(
+                exact(&rgb_p, w_p, h_p, *accent) >= 80,
+                "dPt LinH must leave later accent slices in place"
+            );
+        }
+        let mut red_n = 0usize;
+        let mut blue_n = 0usize;
+        for i in 0..(w_p * h_p) as usize {
+            let px = [rgb_p[i * 3], rgb_p[i * 3 + 1], rgb_p[i * 3 + 2]];
+            if f38_is_grad_red(px) {
+                red_n += 1;
+            } else if f38_is_grad_blue(px) {
+                blue_n += 1;
+            }
+        }
+        assert!(
+            red_n >= 20 && blue_n >= 10,
+            "dPt LinH first slice must show both gradient ends, got red={red_n} blue={blue_n}"
+        );
+        let _ = exact(&rgb_c, w_c, h_c, FALLBACK_ACCENTS[0]);
+    }
+
+    #[test]
+    fn leftover_f38_variants_without_official_gold_stay_not_implemented() {
+        let lin = official_like_f38_lin("5400000");
+        let cases = [
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:pattFill prst="pct50"><a:fgClr><a:srgbClr val="FF0000"/></a:fgClr><a:bgClr><a:srgbClr val="0000FF"/></a:bgClr></a:pattFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:blipFill><a:blip r:embed="rId9"/><a:stretch/></a:blipFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:path path="circle"/><a:tileRect/></a:gradFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:gradFill flip="none" rotWithShape="0"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/><a:tileRect/></a:gradFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:gradFill flip="x" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="2700000" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#,
+            ),
+            official_like_doughnut_xml().replacen("</c:tx>", &format!("</c:tx>{lin}"), 1),
+        ];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_pie(xml)
+                .expect_err(&format!("F38 leftover case {i} should stay NotImplemented"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "F38 leftover case {i} should stay NotImplemented"
+            );
+        }
+        // Official mid-matrix linear grads must still export after the leftover list.
+        render_pie(&official_like_f38_pie_xml(&official_like_f38_lin("0"))).unwrap();
+    }
+
+    fn official_like_f39_pie_xml(pos: &str) -> String {
+        official_like_f38_pie_xml("").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            &format!(r#"<c:legend><c:legendPos val="{pos}"/><c:overlay val="0"/></c:legend>"#),
+        )
+    }
+
+    fn f39_is_colorful(px: [u8; 3]) -> bool {
+        let chroma = px.iter().max().unwrap().saturating_sub(*px.iter().min().unwrap());
+        let fillish = (px[0] as i16 - 234).unsigned_abs() <= 16
+            && (px[1] as i16 - 247).unsigned_abs() <= 16
+            && (px[2] as i16 - 247).unsigned_abs() <= 16;
+        let blackish = px[0] < 50 && px[1] < 50 && px[2] < 50;
+        !fillish && !blackish && chroma >= 20
+    }
+
+    fn f39_colorful_bbox(rgb: &[u8], w: u32, h: u32) -> (i32, i32, i32, i32, f64, f64, usize) {
+        let n_pix = (w * h) as usize;
+        let mut seen = vec![false; n_pix];
+        let idx = |x: i32, y: i32| y as usize * w as usize + x as usize;
+        let mut best = (0i32, 0i32, -1i32, -1i32, 0.0, 0.0, 0usize);
+        for y0 in 0..h as i32 {
+            for x0 in 0..w as i32 {
+                let start = idx(x0, y0);
+                if seen[start] {
+                    continue;
+                }
+                let i0 = start * 3;
+                if !f39_is_colorful([rgb[i0], rgb[i0 + 1], rgb[i0 + 2]]) {
+                    seen[start] = true;
+                    continue;
+                }
+                let mut stack = vec![(x0, y0)];
+                seen[start] = true;
+                let mut min_x = x0;
+                let mut min_y = y0;
+                let mut max_x = x0;
+                let mut max_y = y0;
+                let mut sx = 0f64;
+                let mut sy = 0f64;
+                let mut n = 0usize;
+                while let Some((x, y)) = stack.pop() {
+                    let i = idx(x, y) * 3;
+                    if !f39_is_colorful([rgb[i], rgb[i + 1], rgb[i + 2]]) {
+                        continue;
+                    }
+                    min_x = min_x.min(x);
+                    min_y = min_y.min(y);
+                    max_x = max_x.max(x);
+                    max_y = max_y.max(y);
+                    sx += f64::from(x);
+                    sy += f64::from(y);
+                    n += 1;
+                    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                        let nx = x + dx;
+                        let ny = y + dy;
+                        if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                            continue;
+                        }
+                        let ni = idx(nx, ny);
+                        if seen[ni] {
+                            continue;
+                        }
+                        seen[ni] = true;
+                        stack.push((nx, ny));
+                    }
+                }
+                if n > best.6 {
+                    let cx = sx / n as f64;
+                    let cy = sy / n as f64;
+                    best = (min_x, min_y, max_x, max_y, cx, cy, n);
+                }
+            }
+        }
+        best
+    }
+
+    #[test]
+    fn official_like_f39_automatic_legend_positions_export_and_place() {
+        let right = official_like_f39_pie_xml("r");
+        let left = official_like_f39_pie_xml("l");
+        let top = official_like_f39_pie_xml("t");
+        let bottom = official_like_f39_pie_xml("b");
+        let tr = official_like_f39_pie_xml("tr");
+        let right_png = render_pie(&right).expect("official-like F39 pieLegR must export");
+        let left_png = render_pie(&left).expect("official-like F39 pieLegL must export");
+        let top_png = render_pie(&top).expect("official-like F39 pieLegT must export");
+        let bottom_png = render_pie(&bottom).expect("official-like F39 pieLegB must export");
+        let tr_png = render_pie(&tr).expect("official-like F39 pieLegTR must export");
+        assert_ne!(left_png, right_png, "left legend must move the pie");
+        assert_ne!(top_png, right_png, "top legend must change the layout");
+        assert_ne!(bottom_png, right_png, "bottom legend must change the layout");
+        assert_ne!(tr_png, right_png, "topRight legend must change the key placement");
+        let (w, h, rgb_r) = png_rgb(&right_png);
+        let (_, _, rgb_l) = png_rgb(&left_png);
+        let (_, _, rgb_t) = png_rgb(&top_png);
+        let (_, _, rgb_b) = png_rgb(&bottom_png);
+        let (_, _, rgb_tr) = png_rgb(&tr_png);
+        let r = f39_colorful_bbox(&rgb_r, w, h);
+        let l = f39_colorful_bbox(&rgb_l, w, h);
+        let tbox = f39_colorful_bbox(&rgb_t, w, h);
+        let bbox_b = f39_colorful_bbox(&rgb_b, w, h);
+        assert!(
+            l.4 > r.4 + 8.0,
+            "left legend must shift the pie toward the right, got left cx={} right cx={}",
+            l.4,
+            r.4
+        );
+        let r_d = (r.2 - r.0).max(r.3 - r.1);
+        let l_d = (l.2 - l.0).max(l.3 - l.1);
+        assert!(
+            (l_d - r_d).abs() <= 8,
+            "left and right pies must keep the same reserved-square diameter, got L={l_d} R={r_d}"
+        );
+        let t_d = (tbox.2 - tbox.0).max(tbox.3 - tbox.1);
+        let b_d = (bbox_b.2 - bbox_b.0).max(bbox_b.3 - bbox_b.1);
+        assert!(
+            t_d + 8 < r_d && b_d + 8 < r_d,
+            "top/bottom legends must leave a smaller pie square, got T={t_d} B={b_d} R={r_d}"
+        );
+        // TopRight keeps the right-band square (same diameter/x as right in
+        // this close-enough path) and top-aligns keys with the pie square.
+        let trb = f39_colorful_bbox(&rgb_tr, w, h);
+        assert!(
+            (trb.4 - r.4).abs() < 8.0,
+            "topRight pie must keep the right-band horizontal centre, got tr cx={} r cx={}",
+            trb.4,
+            r.4
+        );
+        let _ = (h, tr_png, bottom_png);
+    }
+
+    #[test]
+    fn leftover_f39_variants_without_official_gold_stay_not_implemented() {
+        let left = official_like_f39_pie_xml("l");
+        let overlay_l = official_like_f38_pie_xml("").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            r#"<c:legend><c:legendPos val="l"/><c:overlay val="1"/></c:legend>"#,
+        );
+        let manual = official_like_f38_pie_xml("").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            r#"<c:legend><c:legendPos val="l"/><c:overlay val="0"/><c:layout><c:manualLayout><c:xMode val="edge"/><c:yMode val="edge"/><c:x val="0.1"/><c:y val="0.1"/><c:w val="0.2"/><c:h val="0.2"/></c:manualLayout></c:layout></c:legend>"#,
+        );
+        let doughnut = official_like_doughnut_xml().replace(
+            r#"<c:legendPos val="r"/>"#,
+            r#"<c:legendPos val="l"/>"#,
+        );
+        let cases = [overlay_l, manual, doughnut];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_pie(xml)
+                .expect_err(&format!("F39 leftover case {i} should stay NotImplemented"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "F39 leftover case {i} should stay NotImplemented"
+            );
+        }
+        render_pie(&left).unwrap();
+    }
+
+    fn official_like_f40_legend(extra: &str) -> String {
+        format!(
+            r#"<c:legend><c:legendPos val="r"/><c:layout><c:manualLayout>{extra}<c:xMode val="edge"/><c:yMode val="edge"/><c:x val="9.7222222222222224E-2"/><c:y val="0.28888888888888886"/><c:w val="0.3125"/><c:h val="0.33333333333333331"/></c:manualLayout></c:layout><c:overlay val="0"/></c:legend>"#
+        )
+    }
+
+    fn official_like_f40_col_xml(legend: &str, name: &str) -> String {
+        let ser = line_ser(0, name, &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)], "");
+        bar_xml(&ser, "", "minMax", Some("col")).replace(
+            r#"<c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>"#,
+            legend,
+        )
+    }
+
+    fn f40_bar_max_x(rgb: &[u8], w: u32, h: u32) -> i32 {
+        let mut max_x = -1i32;
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
+                let i = (y as usize * w as usize + x as usize) * 3;
+                let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+                let chroma = px.iter().max().unwrap().saturating_sub(*px.iter().min().unwrap());
+                let fillish = (px[0] as i16 - 234).unsigned_abs() <= 16
+                    && (px[1] as i16 - 247).unsigned_abs() <= 16
+                    && (px[2] as i16 - 247).unsigned_abs() <= 16;
+                if !fillish && ! (px[0] < 50 && px[1] < 50 && px[2] < 50) && chroma >= 20 {
+                    // skip tiny key-like pixels near edges later; take global
+                    max_x = max_x.max(x);
+                }
+            }
+        }
+        max_x
+    }
+
+    fn f40_key_xy(rgb: &[u8], w: u32, h: u32) -> Option<(i32, i32)> {
+        // Largest 4..=16 square-ish colorful component, like a legend key.
+        let n_pix = (w * h) as usize;
+        let mut seen = vec![false; n_pix];
+        let idx = |x: i32, y: i32| y as usize * w as usize + x as usize;
+        let colorful = |px: [u8; 3]| {
+            let chroma = px.iter().max().unwrap().saturating_sub(*px.iter().min().unwrap());
+            let fillish = (px[0] as i16 - 234).unsigned_abs() <= 16
+                && (px[1] as i16 - 247).unsigned_abs() <= 16
+                && (px[2] as i16 - 247).unsigned_abs() <= 16;
+            !fillish && !(px[0] < 50 && px[1] < 50 && px[2] < 50) && chroma >= 20
+        };
+        let mut best: Option<(i32, i32, i32, i32, usize)> = None;
+        for y0 in 0..h as i32 {
+            for x0 in 0..w as i32 {
+                let start = idx(x0, y0);
+                if seen[start] {
+                    continue;
+                }
+                let i0 = start * 3;
+                if !colorful([rgb[i0], rgb[i0 + 1], rgb[i0 + 2]]) {
+                    seen[start] = true;
+                    continue;
+                }
+                let mut stack = vec![(x0, y0)];
+                seen[start] = true;
+                let mut min_x = x0;
+                let mut min_y = y0;
+                let mut max_x = x0;
+                let mut max_y = y0;
+                let mut n = 0usize;
+                while let Some((x, y)) = stack.pop() {
+                    let i = idx(x, y) * 3;
+                    if !colorful([rgb[i], rgb[i + 1], rgb[i + 2]]) {
+                        continue;
+                    }
+                    min_x = min_x.min(x);
+                    min_y = min_y.min(y);
+                    max_x = max_x.max(x);
+                    max_y = max_y.max(y);
+                    n += 1;
+                    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                        let nx = x + dx;
+                        let ny = y + dy;
+                        if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                            continue;
+                        }
+                        let ni = idx(nx, ny);
+                        if seen[ni] {
+                            continue;
+                        }
+                        seen[ni] = true;
+                        stack.push((nx, ny));
+                    }
+                }
+                let bw = max_x - min_x + 1;
+                let bh = max_y - min_y + 1;
+                if (4..=16).contains(&bw) && (4..=16).contains(&bh) && (best.is_none() || n > best.unwrap().4)
+                {
+                    best = Some((min_x, min_y, max_x, max_y, n));
+                }
+            }
+        }
+        best.map(|b| (b.0, b.1))
+    }
+
+    #[test]
+    fn official_like_f40_manual_inner_and_edge_export_and_place() {
+        let auto = official_like_f40_col_xml(
+            r#"<c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>"#,
+            "colAuto",
+        );
+        let official_a = official_like_f40_col_xml(&official_like_f40_legend(""), "colManualA");
+        let inner_a = official_like_f40_col_xml(
+            &official_like_f40_legend(r#"<c:layoutTarget val="inner"/>"#),
+            "colManualA",
+        );
+        let wmode_a = official_like_f40_col_xml(
+            &official_like_f40_legend(r#"<c:wMode val="edge"/>"#),
+            "colManualA",
+        );
+        let hmode_a = official_like_f40_col_xml(
+            &official_like_f40_legend(r#"<c:hMode val="edge"/>"#),
+            "colManualA",
+        );
+        let whmode_a = official_like_f40_col_xml(
+            &official_like_f40_legend(r#"<c:wMode val="edge"/><c:hMode val="edge"/>"#),
+            "colManualA",
+        );
+        let innerwh_a = official_like_f40_col_xml(
+            &official_like_f40_legend(
+                r#"<c:layoutTarget val="inner"/><c:wMode val="edge"/><c:hMode val="edge"/>"#,
+            ),
+            "colManualA",
+        );
+        let hmode_b = official_like_f40_col_xml(
+            r#"<c:legend><c:legendPos val="r"/><c:layout><c:manualLayout><c:hMode val="edge"/><c:xMode val="edge"/><c:yMode val="edge"/><c:x val="0.15277777777777779"/><c:y val="0.46666666666666667"/><c:w val="0.55555555555555558"/><c:h val="0.22222222222222221"/></c:manualLayout></c:layout><c:overlay val="0"/></c:legend>"#,
+            "colManualB",
+        );
+        let auto_png = render_bar(&auto).expect("F40 colAuto must export");
+        let official_png = render_bar(&official_a).expect("F40 official outer manual must export");
+        let inner_png = render_bar(&inner_a).expect("F40 layoutTarget=inner must export");
+        let wmode_png = render_bar(&wmode_a).expect("F40 wMode=edge must export");
+        let hmode_png = render_bar(&hmode_a).expect("F40 hMode=edge must export");
+        let whmode_png = render_bar(&whmode_a).expect("F40 wMode+hMode=edge must export");
+        let innerwh_png = render_bar(&innerwh_a).expect("F40 inner+edge must export");
+        render_bar(&hmode_b).expect("F40 degenerate hMode=edge must still export");
+        assert_ne!(official_png, auto_png);
+        assert_ne!(inner_png, official_png, "inner must change the plot reservation");
+        let (w, h, rgb_o) = png_rgb(&official_png);
+        let (_, _, rgb_i) = png_rgb(&inner_png);
+        let (_, _, rgb_w) = png_rgb(&wmode_png);
+        let (_, _, rgb_h) = png_rgb(&hmode_png);
+        let (_, _, rgb_wh) = png_rgb(&whmode_png);
+        let (_, _, rgb_iw) = png_rgb(&innerwh_png);
+        assert!(
+            f40_bar_max_x(&rgb_i, w, h) > f40_bar_max_x(&rgb_o, w, h) + 8,
+            "inner must not keep the automatic right-band plot reserve"
+        );
+        let ko = f40_key_xy(&rgb_o, w, h).expect("official manual key");
+        let ki = f40_key_xy(&rgb_i, w, h).expect("inner key");
+        assert!(
+            (ki.0 - ko.0).abs() <= 2 && (ki.1 - ko.1).abs() <= 2,
+            "inner keeps chart-space key placement, got inner={ki:?} official={ko:?}"
+        );
+        let kw = f40_key_xy(&rgb_w, w, h).expect("wMode key");
+        let kh = f40_key_xy(&rgb_h, w, h).expect("hMode key");
+        assert!(kw.0 + 4 < ko.0, "wMode=edge shortens from the right, got w={kw:?} official={ko:?}");
+        assert!(kh.1 + 4 < ko.1, "hMode=edge shortens from the bottom, got h={kh:?} official={ko:?}");
+        let kwh = f40_key_xy(&rgb_wh, w, h).expect("whMode key");
+        assert!(
+            (kwh.0 - kw.0).abs() <= 2 && (kwh.1 - kh.1).abs() <= 2,
+            "combined edge modes compose, got wh={kwh:?} w={kw:?} h={kh:?}"
+        );
+        let kiw = f40_key_xy(&rgb_iw, w, h).expect("innerwh key");
+        assert!(
+            (kiw.0 - kwh.0).abs() <= 2 && (kiw.1 - kwh.1).abs() <= 2,
+            "inner+edge keeps the edge-mode chart-space key, got innerwh={kiw:?} wh={kwh:?}"
+        );
+        assert!(
+            f40_bar_max_x(&rgb_iw, w, h) > f40_bar_max_x(&rgb_wh, w, h) + 8,
+            "inner+edge must still drop the automatic right-band reserve"
+        );
+    }
+
+    #[test]
+    fn leftover_f40_variants_without_official_gold_stay_not_implemented() {
+        let pie_manual = official_like_f38_pie_xml("").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            r#"<c:legend><c:legendPos val="r"/><c:overlay val="0"/><c:layout><c:manualLayout><c:layoutTarget val="inner"/><c:xMode val="edge"/><c:yMode val="edge"/><c:x val="0.1"/><c:y val="0.2"/><c:w val="0.3"/><c:h val="0.3"/></c:manualLayout></c:layout></c:legend>"#,
+        );
+        let err = render_pie(&pie_manual).expect_err("pie manual inner should stay NotImplemented");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+        let bad = official_like_f40_col_xml(
+            r#"<c:legend><c:legendPos val="r"/><c:layout><c:manualLayout><c:layoutTarget val="other"/><c:x val="0.1"/><c:w val="0.3"/></c:manualLayout></c:layout><c:overlay val="0"/></c:legend>"#,
+            "badTarget",
+        );
+        let err = render_bar(&bad).expect_err("unknown layoutTarget should stay NotImplemented");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
     #[test]
     fn unsupported_pie_inputs_stay_not_implemented() {
         let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
         let base = standard_pie_xml(&ser, "", "");
-        let two = format!(
-            "{}{}",
-            ser,
-            line_ser(1, "S2", &[Some(1.0), Some(2.0), Some(3.0)], "")
-        );
         let cases = [
             // Leftover: a val cache ptCount with no val pts and no category
             // pts is not sized from untrusted ptCount.
@@ -7540,20 +9787,6 @@
           <c:val><c:numLit><c:ptCount val="4"/></c:numLit></c:val>
         </c:ser>"#,
                 r#"<c:dispBlanksAs val="gap"/>"#,
-                "",
-            ),
-            pie_space(
-                &format!(r#"<c:pieChart><c:varyColors val="1"/>{two}</c:pieChart>"#),
-                "",
-            ),
-            base.replace("<c:pieChart>", "<c:pie3DChart>")
-                .replace("</c:pieChart>", "</c:pie3DChart>"),
-            base.replace("<c:pieChart>", "<c:doughnutChart>")
-                .replace("</c:pieChart>", "</c:doughnutChart>"),
-            pie_space(
-                r#"<c:ofPieChart><c:ofPieType val="pie"/><c:varyColors val="1"/><c:ser>
-          <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
-        </c:ser></c:ofPieChart>"#,
                 "",
             ),
             standard_pie_xml(&ser, "", r#"<c:firstSliceAng val="361"/>"#),
@@ -7578,18 +9811,6 @@
                 "",
                 "",
             ),
-            standard_pie_xml(
-                &line_ser(
-                    0,
-                    "S1",
-                    &[Some(1.0), Some(2.0)],
-                    r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="0" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#,
-                ),
-                "",
-                "",
-            ),
-            standard_pie_xml(&ser, r#"<c:dispBlanksAs val="zero"/>"#, ""),
-            standard_pie_xml(&ser, r#"<c:dispBlanksAs val="span"/>"#, ""),
             base.replacen(
                 r#"</c:pieChart>"#,
                 r#"<c:dLbls><c:showVal val="1"/></c:dLbls></c:pieChart>"#,
@@ -7602,8 +9823,6 @@
                 ),
                 "",
             ),
-            standard_pie_xml(&ser, "", "")
-                .replace(r#"<c:legendPos val="r"/>"#, r#"<c:legendPos val="l"/>"#),
         ];
         for (i, xml) in cases.iter().enumerate() {
             let err =
@@ -7623,6 +9842,44 @@
             ),
         )
         .unwrap();
+        // Official F09 gold writes dispBlanksAs=zero. With a complete cache
+        // zero and span are inert and must export the same image as gap.
+        let gap = render_pie(&standard_pie_xml(
+            &ser,
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            "",
+        ))
+        .unwrap();
+        let zero = render_pie(&standard_pie_xml(
+            &ser,
+            r#"<c:dispBlanksAs val="zero"/>"#,
+            "",
+        ))
+        .unwrap();
+        let span = render_pie(&standard_pie_xml(
+            &ser,
+            r#"<c:dispBlanksAs val="span"/>"#,
+            "",
+        ))
+        .unwrap();
+        assert_eq!(zero, gap, "complete-cache pie zero must match gap");
+        assert_eq!(span, gap, "complete-cache pie span must match gap");
+        let blank_ser = line_ser(0, "S1", &[Some(1.0), None, Some(3.0)], "");
+        for mode in ["zero", "span"] {
+            let xml = standard_pie_xml(
+                &blank_ser,
+                &format!(r#"<c:dispBlanksAs val="{mode}"/>"#),
+                "",
+            );
+            let err = render_pie(&xml).expect_err(&format!(
+                "pie dispBlanksAs={mode} with a blank should stay NotImplemented"
+            ));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "pie dispBlanksAs={mode} with a blank should stay NotImplemented"
+            );
+        }
         render_line(&standard_line_xml(
             &line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], ""),
             "",
@@ -7745,23 +10002,45 @@
 
         let auto = col.replace(r#"<c:min val="1"/><c:max val="1000"/>"#, "");
         let auto_doc = crate::xml::parse(auto.as_bytes()).unwrap();
-        assert!(
-            read_chart(
-                &auto_doc.root,
-                FALLBACK_ACCENTS,
-                None,
-                "",
-                RenderDpi::DEFAULT
-            )
-            .is_err(),
-            "omitted log min/max must stay NI"
-        );
+        let auto_chart = read_chart(
+            &auto_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .expect("omitted log min/max with values >= 1 must export");
+        assert_eq!(auto_chart.axis.min, None);
+        render_rgb_chart(
+            &auto_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("auto log10 1/10/100/1000 must render like explicit 1..1000");
 
         let below = inject_explicit_log10(&mixed_column_xml(&[0.5, 10.0, 100.0, 1000.0]));
         let below_doc = crate::xml::parse(below.as_bytes()).unwrap();
+        render_rgb_chart(
+            &below_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("positive values below the explicit log min must render a close-enough sliver");
+        let zero = inject_explicit_log10(&mixed_column_xml(&[0.0, 10.0, 100.0, 1000.0]));
+        let zero_doc = crate::xml::parse(zero.as_bytes()).unwrap();
         assert!(
             render_rgb_chart(
-                &below_doc.root,
+                &zero_doc.root,
                 424,
                 265,
                 FALLBACK_ACCENTS,
@@ -7771,7 +10050,7 @@
                 "",
             )
             .is_err(),
-            "values below the explicit log min must stay NI"
+            "non-positive log values stay NI"
         );
 
         let area = inject_explicit_log10(&standard_area_xml(
@@ -7916,6 +10195,21 @@
             "2",
         ))
         .unwrap();
+        // Official F16-8 writes the Excel default midCat, not the between fixture.
+        render_area(
+            &with_cat_crosses_at(
+                &standard_area_xml(
+                    &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                    "",
+                ),
+                "2",
+            )
+            .replace(
+                r#"crossBetween val="between""#,
+                r#"crossBetween val="midCat""#,
+            ),
+        )
+        .expect("standard area midCat plus catAx crossesAt must export");
         let bar = with_cat_crosses_at(
             &bar_xml(
                 &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
@@ -8146,6 +10440,34 @@
             "min",
         ))
         .unwrap();
+        // Official F17-8 writes the Excel default midCat, not the between fixture.
+        let area_mid_min = with_cat_crosses(
+            &standard_area_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "min",
+        )
+        .replace(
+            r#"crossBetween val="between""#,
+            r#"crossBetween val="midCat""#,
+        );
+        render_area(&area_mid_min)
+            .expect("standard area midCat plus catAx crosses=min must export");
+        render_area(
+            &with_cat_crosses(
+                &standard_area_xml(
+                    &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                    "",
+                ),
+                "max",
+            )
+            .replace(
+                r#"crossBetween val="between""#,
+                r#"crossBetween val="midCat""#,
+            ),
+        )
+        .expect("standard area midCat plus catAx crosses=max must export under the same general rule");
         let bar = with_cat_crosses(
             &bar_xml(
                 &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
@@ -8853,6 +11175,189 @@
         );
     }
 
+    fn with_val_tick_lbl_pos(xml: &str, pos: &str) -> String {
+        let start = xml.find("<c:valAx").expect("fixture must have valAx");
+        let rel_end = xml[start..]
+            .find("</c:valAx>")
+            .expect("fixture must close valAx");
+        let end = start + rel_end;
+        let val = &xml[start..end];
+        let new_val = if let Some((head, tail)) = val.split_once(r#"<c:tickLblPos val=""#) {
+            let close = tail.find('"').expect("tickLblPos close");
+            format!(r#"{}<c:tickLblPos val="{}{}"#, head, pos, &tail[close..])
+        } else {
+            format!(r#"{}<c:tickLblPos val="{}"/>"#, val, pos)
+        };
+        let out = format!("{}{}{}", &xml[..start], new_val, &xml[end..]);
+        assert!(
+            out[start..end + new_val.len() - val.len()].contains(&format!(
+                r#"<c:tickLblPos val="{pos}"/>"#
+            )),
+            "fixture must carry valAx tickLblPos={pos}"
+        );
+        out
+    }
+
+    #[test]
+    fn val_axis_tick_lbl_pos_none_keeps_axis_line_and_releases_gutter() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let mixed = mixed_column_explicit_pm8(&values).replacen(
+            "<c:ser>",
+            r#"<c:ser><c:invertIfNegative val="0"/>"#,
+            1,
+        );
+        let control_doc = crate::xml::parse(mixed.as_bytes()).unwrap();
+        let none_xml = with_val_tick_lbl_pos(&mixed, "none");
+        let none_doc = crate::xml::parse(none_xml.as_bytes()).unwrap();
+        let delete_doc = crate::xml::parse(with_val_delete(&mixed).as_bytes()).unwrap();
+        let none_chart = read_chart(
+            &none_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert!(none_chart.axis.hide_tick_labels);
+        assert!(!none_chart.axis.deleted);
+
+        let render = |root: &crate::xml::Element| {
+            render_rgb_chart(
+                root,
+                424,
+                265,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+            )
+            .unwrap()
+        };
+        let control_png = render(&control_doc.root);
+        let none_png = render(&none_doc.root);
+        let delete_png = render(&delete_doc.root);
+        let (w, h, crgb) = png_rgb(&control_png);
+        let (_, _, nrgb) = png_rgb(&none_png);
+        let (_, _, drgb) = png_rgb(&delete_png);
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let first_accent_x = |rgb: &[u8]| {
+            for x in 0..w {
+                for y in 0..h {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if near(&rgb[i..i + 3]) {
+                        return x;
+                    }
+                }
+            }
+            panic!("expected accent fill");
+        };
+        let left_x = first_accent_x(&crgb);
+        let none_x = first_accent_x(&nrgb);
+        let del_x = first_accent_x(&drgb);
+        assert!(
+            none_x + 8 < left_x,
+            "official tickLblPos=none releases the value-label gutter; none={none_x} control={left_x}"
+        );
+        assert!(
+            (none_x as i32 - del_x as i32).abs() <= 2,
+            "tickLblPos=none and delete=true release the same gutter; none={none_x} delete={del_x}"
+        );
+        // The leftover value axis is the tallest vertical ink in the left
+        // quarter (first_accent_x is the first column, not the axis).
+        // Labels would sit left of that axis, beyond TICK_OUT=3.
+        let y0 = h / 6;
+        let y1 = (h * 5) / 6;
+        let tallest_vline = |rgb: &[u8]| {
+            let mut best_x = 0u32;
+            let mut best = 0u32;
+            for x in 0..w / 4 {
+                let mut n = 0u32;
+                for y in y0..y1 {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+                if n > best {
+                    best = n;
+                    best_x = x;
+                }
+            }
+            (best_x, best)
+        };
+        let (none_axis_x, none_axis) = tallest_vline(&nrgb);
+        let (_, delete_axis) = tallest_vline(&drgb);
+        assert!(
+            none_axis > delete_axis + 20,
+            "official tickLblPos=none keeps the value axis line; none={none_axis}@{none_axis_x} delete={delete_axis}"
+        );
+        let left_of_ticks = |rgb: &[u8], axis_x: u32| {
+            let mut n = 0u32;
+            let lim = axis_x.saturating_sub(4);
+            for y in y0..y1 {
+                for x in 0..lim {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let none_outside = left_of_ticks(&nrgb, none_axis_x);
+        let control_axis_x = tallest_vline(&crgb).0;
+        let control_outside = left_of_ticks(&crgb, control_axis_x);
+        assert!(
+            control_outside > 20 && none_outside < 5,
+            "official tickLblPos=none omits value tick labels left of the axis; control_outside={control_outside} none_outside={none_outside} axis={none_axis_x}"
+        );
+
+        render_line(&with_val_tick_lbl_pos(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "none",
+        ))
+        .unwrap();
+
+        let bar_base = bar_xml(
+            &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+            "",
+            "minMax",
+            Some("bar"),
+        );
+        let bar_none_xml = with_val_tick_lbl_pos(&bar_base, "none");
+        let bar_none_doc = crate::xml::parse(bar_none_xml.as_bytes()).unwrap();
+        let bar_none_chart = read_chart(
+            &bar_none_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert!(bar_none_chart.axis.hide_tick_labels);
+        assert!(!bar_none_chart.axis.deleted);
+        render_bar(&bar_none_xml).unwrap();
+
+        let log = with_val_tick_lbl_pos(
+            &inject_explicit_log10(&mixed_column_xml(&[1.0, 10.0, 100.0, 1000.0])),
+            "none",
+        );
+        let log_doc = crate::xml::parse(log.as_bytes()).unwrap();
+        assert!(
+            read_chart(&log_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "log plus tickLblPos=none stays NI"
+        );
+    }
+
     fn secondary_pair_xml(kind: &str, s1: &[f64], s2: &[f64], auto: bool) -> String {
         let n = s1.len();
         let cats = (0..n)
@@ -8917,6 +11422,20 @@
                     n2 = nums(s2),
                 ),
             ),
+            "area" => (
+                format!(
+                    r#"<c:areaChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:axId val="1"/><c:axId val="2"/></c:areaChart>"#,
+                    n = n,
+                    cats = cats,
+                    n1 = nums(s1),
+                ),
+                format!(
+                    r#"<c:areaChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser><c:axId val="3"/><c:axId val="4"/></c:areaChart>"#,
+                    n = n,
+                    cats = cats,
+                    n2 = nums(s2),
+                ),
+            ),
             "combo" => (
                 format!(
                     r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart>"#,
@@ -8946,16 +11465,23 @@
                 ),
             ),
         };
+        let (cat_pos, val_p, val_s, between) = if kind == "bar" {
+            ("l", "b", "t", "between")
+        } else if kind == "area" {
+            ("b", "l", "r", "midCat")
+        } else {
+            ("b", "l", "r", "between")
+        };
         format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
   <c:chart>
     <c:plotArea>
       {w1}{w2}
-      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
-      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>{scale_p}</c:scaling>{major_p}<c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
-      <c:valAx><c:axId val="4"/><c:scaling><c:orientation val="minMax"/>{scale_s}</c:scaling>{major_s}<c:delete val="0"/><c:axPos val="r"/><c:crossAx val="3"/><c:crosses val="max"/><c:crossBetween val="between"/></c:valAx>
-      <c:catAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="b"/><c:crossAx val="4"/></c:catAx>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="{cat_pos}"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>{scale_p}</c:scaling>{major_p}<c:delete val="0"/><c:axPos val="{val_p}"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="{between}"/></c:valAx>
+      <c:valAx><c:axId val="4"/><c:scaling><c:orientation val="minMax"/>{scale_s}</c:scaling>{major_s}<c:delete val="0"/><c:axPos val="{val_s}"/><c:crossAx val="3"/><c:crosses val="max"/><c:crossBetween val="{between}"/></c:valAx>
+      <c:catAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="{cat_pos}"/><c:crossAx val="4"/></c:catAx>
     </c:plotArea>
     <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
   </c:chart>
@@ -9140,20 +11666,139 @@
         ))
         .unwrap();
 
-        let bar = crate::xml::parse(secondary_pair_xml("bar", &s1, &s2, false).as_bytes()).unwrap();
+        // Official F21-5 / F21-6 / F21-7 / F21-8 Chart.Export gold exists, so
+        // these must produce an image (t215u). Close-enough composition of
+        // the already-locked pairing; residuals stay on the review page.
+        let bar_doc = crate::xml::parse(secondary_pair_xml("bar", &s1, &s2, false).as_bytes()).unwrap();
+        let bar_chart = read_chart(&bar_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("clustered bar secondary valAx must export");
+        assert!(bar_chart.axis_secondary.is_some());
+        assert!(!bar_chart.series[0].on_secondary);
+        assert!(bar_chart.series[1].on_secondary);
+        let bar_png = render_rgb_chart(
+            &bar_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("clustered bar secondary valAx must produce an image");
+        let (bw, bh, brgb) = png_rgb(&bar_png);
+        let accent_count = |rgb: &[u8], w: u32, h: u32, accent: [u8; 3]| {
+            let mut n = 0u32;
+            for i in (0..(w * h) as usize).map(|i| i * 3) {
+                if near([rgb[i], rgb[i + 1], rgb[i + 2]], accent, 16) {
+                    n += 1;
+                }
+            }
+            n
+        };
         assert!(
-            read_chart(&bar.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "clustered bar secondary valAx stays NI"
+            accent_count(&brgb, bw, bh, a0) > 50 && accent_count(&brgb, bw, bh, a1) > 50,
+            "bar secondary must paint both series"
         );
-        let combo = crate::xml::parse(secondary_pair_xml("combo", &s1, &s2, false).as_bytes()).unwrap();
+        let top_ink = {
+            let mut n = 0u32;
+            for y in 0..bh / 8 {
+                for x in 0..bw {
+                    let i = (y as usize * bw as usize + x as usize) * 3;
+                    if brgb[i] < 40 && brgb[i + 1] < 40 && brgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
         assert!(
-            read_chart(&combo.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "combo (different wrappers) stays NI for F26"
+            top_ink > 20,
+            "official bar secondary valAx places tick labels on the top; top_ink={top_ink}"
         );
-        let auto = crate::xml::parse(secondary_pair_xml("col", &s1, &s2, true).as_bytes()).unwrap();
+
+        let auto_doc = crate::xml::parse(secondary_pair_xml("col", &s1, &s2, true).as_bytes()).unwrap();
+        let auto_chart = read_chart(&auto_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("omitted min/max on a secondary pair must export");
+        assert!(auto_chart.axis.min.is_none() && auto_chart.axis.max.is_none());
+        assert!(auto_chart
+            .axis_secondary
+            .as_ref()
+            .is_some_and(|spec| spec.min.is_none() && spec.max.is_none()));
+        let auto_png = render_rgb_chart(
+            &auto_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("omitted min/max secondary pair must produce an image");
+        let (aw, ah, argb) = png_rgb(&auto_png);
+        let auto_r1 = accent_x_runs(&argb, aw, ah, a1);
+        assert_eq!(
+            auto_r1.len(),
+            4,
+            "auto secondary columns should occupy four category slots, got {auto_r1:?}"
+        );
+
+        let area_doc = crate::xml::parse(secondary_pair_xml("area", &s1, &s2, false).as_bytes()).unwrap();
+        let area_chart = read_chart(&area_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("standard area secondary valAx must export");
+        assert!(area_chart.area_midcat);
+        assert!(area_chart.axis_secondary.is_some());
+        render_rgb_chart(
+            &area_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("standard area secondary valAx must produce an image");
+
+        let combo_doc = crate::xml::parse(secondary_pair_xml("combo", &s1, &s2, false).as_bytes()).unwrap();
+        let combo_chart = read_chart(&combo_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("official column+line secondary combo must export");
+        assert!(matches!(combo_chart.series[0].plot_kind, PlotKind::ClusteredColumn));
+        assert!(matches!(combo_chart.series[1].plot_kind, PlotKind::StandardLine));
+        assert!(!combo_chart.series[0].on_secondary);
+        assert!(combo_chart.series[1].on_secondary);
+        let combo_png = render_rgb_chart(
+            &combo_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("official column+line secondary combo must produce an image");
+        let (cow, coh, corgb) = png_rgb(&combo_png);
+        let combo_r0 = accent_x_runs(&corgb, cow, coh, a0);
+        assert_eq!(
+            combo_r0.len(),
+            4,
+            "combo primary must still be four columns, got {combo_r0:?}"
+        );
         assert!(
-            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "omitted min/max on a secondary pair stays NI"
+            accent_count(&corgb, cow, coh, a1) > 20,
+            "combo secondary line must be painted, not omitted"
+        );
+        assert!(
+            combo_chart.series[1].line_visible
+                || !matches!(combo_chart.series[1].marker, MarkerKind::None),
+            "combo secondary must keep the line series style rather than a column fill"
+        );
+        let combo_right = ink(&corgb, cow, coh);
+        assert!(
+            combo_right > 10,
+            "combo secondary valAx still places tick labels on the right; ink={combo_right}"
         );
     }
 
@@ -9206,6 +11851,11 @@
                 r#"<c:scaling><c:orientation val="minMax"/><c:min val="{vmin}"/><c:max val="{vmax}"/></c:scaling>"#
             )
         };
+        let major_el = if auto {
+            String::new()
+        } else {
+            format!(r#"<c:majorUnit val="{major}"/>"#)
+        };
         let (cat_pos, val_pos) = if dir == "bar" { ("l", "b") } else { ("b", "l") };
         format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -9218,7 +11868,7 @@
         <c:gapWidth val="150"/><c:overlap val="100"/><c:axId val="1"/><c:axId val="2"/>
       </c:barChart>
       <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="{cat_pos}"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
-      <c:valAx><c:axId val="2"/>{scaling}<c:majorUnit val="{major}"/><c:delete val="0"/><c:axPos val="{val_pos}"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
+      <c:valAx><c:axId val="2"/>{scaling}{major_el}<c:delete val="0"/><c:axPos val="{val_pos}"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
     </c:plotArea>
     <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
   </c:chart>
@@ -9406,11 +12056,54 @@
         let br1 = accent_x_runs(&brgb, bw, bh, a1);
         assert_eq!(br1.len(), 3, "missing S2 in B is not drawn, got {br1:?}");
 
-        let auto = crate::xml::parse(stacked_xml("col", "stacked", &series, true, false, false).as_bytes())
+        // Official F22-6 Chart.Export gold exists, so omitted min/max/major
+        // on stacked columns must produce an image. Auto bounds reuse
+        // scale_values on stacked extents (official 0-80 / 10), not raw
+        // point values, and are close-enough rather than a unique lock.
+        let auto_doc = crate::xml::parse(stacked_xml("col", "stacked", &series, true, false, false).as_bytes())
             .unwrap();
+        let auto_chart = read_chart(&auto_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("omitted min/max on stacked must export");
+        assert!(auto_chart.axis.min.is_none() && auto_chart.axis.max.is_none());
+        let auto_png = render_rgb_chart(
+            &auto_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("omitted min/max stacked must produce an image");
+        let (aw, ah, argb) = png_rgb(&auto_png);
+        let auto_r0 = accent_x_runs(&argb, aw, ah, a0);
+        let auto_r1 = accent_x_runs(&argb, aw, ah, a1);
+        let auto_r2 = accent_x_runs(&argb, aw, ah, a2);
+        assert_eq!(auto_r0.len(), 4, "auto stacked S1 four slots, got {auto_r0:?}");
+        assert_eq!(auto_r1.len(), 4, "auto stacked S2 four slots, got {auto_r1:?}");
+        assert_eq!(auto_r2.len(), 4, "auto stacked S3 four slots, got {auto_r2:?}");
+        let h_grids = {
+            let mut n = 0u32;
+            for y in 0..ah {
+                let mut ink = 0u32;
+                for x in aw / 8..(aw * 3) / 4 {
+                    let i = (y as usize * aw as usize + x as usize) * 3;
+                    if argb[i] < 40 && argb[i + 1] < 40 && argb[i + 2] < 40 {
+                        ink += 1;
+                    }
+                }
+                if ink >= aw / 5 {
+                    n += 1;
+                }
+            }
+            n
+        };
+        // Official auto is 0-80 major 10 (8 intervals). Explicit 0-80 / 20
+        // has fewer grids. Raw point max 40 would not use an 80 range.
         assert!(
-            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "omitted min/max on stacked stays NI"
+            h_grids >= 8,
+            "stacked auto should use stacked extents (0-80 / 10), grids={h_grids}"
         );
         let inv = crate::xml::parse(stacked_xml("col", "stacked", &series, false, true, false).as_bytes())
             .unwrap();
@@ -9489,6 +12182,11 @@
                 r#"<c:scaling><c:orientation val="minMax"/><c:min val="{min}"/><c:max val="{max}"/></c:scaling>"#
             )
         };
+        let major_el = if auto {
+            String::new()
+        } else {
+            format!(r#"<c:majorUnit val="{major}"/>"#)
+        };
         let cross = if midcat { "midCat" } else { "between" };
         format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -9501,7 +12199,7 @@
         <c:axId val="1"/><c:axId val="2"/>
       </c:{kind}>
       <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
-      <c:valAx><c:axId val="2"/>{scaling}<c:majorUnit val="{major}"/><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="{cross}"/></c:valAx>
+      <c:valAx><c:axId val="2"/>{scaling}{major_el}<c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="{cross}"/></c:valAx>
     </c:plotArea>
     <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
   </c:chart>
@@ -9840,15 +12538,83 @@
             "mixed area cat A S3 covers the S2 band, got {mix_stack:?}"
         );
 
+        // Official F23-7 Chart.Export gold exists, so omitted min/max/major
+        // on a stacked line must produce an image. Auto bounds reuse
+        // scale_values on algebraic cumulative extents (official 0-80 / 10),
+        // not raw point values, and are close-enough rather than a unique
+        // lock. The same general rule is allowed on stacked area; official
+        // gold in this folder is the line case only.
         let auto = crate::xml::parse(
             line_area_stacked_xml("lineChart", "stacked", &series, true, "0", "80", false, true)
                 .as_bytes(),
         )
         .unwrap();
+        let auto_chart = read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("omitted min/max on stacked line must export");
+        assert!(auto_chart.axis.min.is_none() && auto_chart.axis.max.is_none());
+        let auto_png = render_rgb_chart(
+            &auto.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("omitted min/max stacked line must produce an image");
+        let (aw, ah, argb) = png_rgb(&auto_png);
+        let auto_pts = accent_pixels(&argb, aw, ah, a2);
         assert!(
-            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "omitted min/max on stacked line stays NI"
+            !auto_pts.is_empty(),
+            "auto stacked line should draw S3 ink"
         );
+        let h_grids = {
+            let mut n = 0u32;
+            for y in 0..ah {
+                let mut ink = 0u32;
+                for x in aw / 8..(aw * 3) / 4 {
+                    let i = (y as usize * aw as usize + x as usize) * 3;
+                    if argb[i] < 40 && argb[i + 1] < 40 && argb[i + 2] < 40 {
+                        ink += 1;
+                    }
+                }
+                if ink >= aw / 5 {
+                    n += 1;
+                }
+            }
+            n
+        };
+        // Official auto is 0-80 major 10 (8 intervals). Explicit 0-80 / 20
+        // has fewer grids. Raw point max 40 would not use an 80 range.
+        assert!(
+            h_grids >= 8,
+            "stacked line auto should use cumulative extents (0-80 / 10), grids={h_grids}"
+        );
+        let auto_area = crate::xml::parse(
+            line_area_stacked_xml("areaChart", "stacked", &series, true, "0", "80", true, false)
+                .as_bytes(),
+        )
+        .unwrap();
+        read_chart(
+            &auto_area.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .expect("omitted min/max on stacked area must export");
+        render_rgb_chart(
+            &auto_area.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("omitted min/max stacked area must produce an image");
         let between_area = crate::xml::parse(
             line_area_stacked_xml("areaChart", "stacked", &series, false, "0", "80", false, false)
                 .as_bytes(),
@@ -9977,6 +12743,78 @@
         .unwrap();
         assert_ne!(small, large, "10pt and 18pt titles must not share a raster");
         assert!(large.len() >= 8 && small.len() >= 8);
+    }
+
+    fn two_paragraph_title_xml() -> String {
+        let title = concat!(
+            "<c:title><c:tx><c:rich xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">",
+            "<a:bodyPr/><a:lstStyle/>",
+            "<a:p><a:pPr><a:defRPr/></a:pPr><a:r><a:rPr lang=\"en-US\"/><a:t>Line one</a:t></a:r></a:p>",
+            "<a:p><a:pPr><a:defRPr/></a:pPr><a:r><a:rPr lang=\"en-US\"/><a:t>Line two</a:t></a:r></a:p>",
+            "</c:rich></c:tx><c:overlay val=\"0\"/></c:title>",
+        );
+        LONG_LEGEND.replace("<c:chart>", &format!("<c:chart>{title}"))
+    }
+
+    #[test]
+    fn title_paragraphs_and_breaks_become_hard_newlines() {
+        let doc = crate::xml::parse(two_paragraph_title_xml().as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("multi-paragraph titles are renderable hard breaks");
+        assert_eq!(chart.title.as_deref(), Some("Line one\nLine two"));
+        assert_eq!(chart.title_typo, None);
+
+        let br = titled_legend_xml("<a:defRPr/>").replace(
+            "<a:t>Legend foundation</a:t>",
+            "<a:t>Legend</a:t></a:r><a:br/><a:r><a:rPr lang=\"en-US\"/><a:t>foundation</a:t>",
+        );
+        let doc = crate::xml::parse(br.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("a:br is a hard title break");
+        assert_eq!(chart.title.as_deref(), Some("Legend\nfoundation"));
+    }
+
+    #[test]
+    fn title_wrap_keeps_short_lines_and_splits_when_wider_than_the_box() {
+        let short = wrap_title_lines("Legend foundation", None, None, 13.0, 400.0);
+        assert_eq!(short, vec!["Legend foundation".to_string()]);
+        let hard = wrap_title_lines("Alpha\nBeta", None, None, 13.0, 400.0);
+        assert_eq!(hard, vec!["Alpha".to_string(), "Beta".to_string()]);
+        let long = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+        let wrapped = wrap_title_lines(long, None, None, 20.0, 80.0);
+        assert!(
+            wrapped.len() >= 2,
+            "a string wider than the title box must wrap: {wrapped:?}"
+        );
+        assert!(wrapped.iter().all(|line| !line.is_empty()));
+        assert_eq!(wrapped.join(""), long);
+
+        let y1 = titled_plot_y(
+            RenderDpi::DEFAULT,
+            ChartHost::Excel,
+            None,
+            None,
+            None,
+            13.0,
+            1,
+        );
+        let y2 = titled_plot_y(
+            RenderDpi::DEFAULT,
+            ChartHost::Excel,
+            None,
+            None,
+            None,
+            13.0,
+            2,
+        );
+        assert!(y2 > y1, "wrapped titles must reserve a taller plot offset");
+        let title_top = RenderDpi::DEFAULT.scale_f(4.0);
+        let band = text_height(None, 13.0).ceil() as i32;
+        assert_eq!(
+            y1,
+            title_top as i32 + 2 * band,
+            "one-line titles keep the previous plot offset"
+        );
     }
 
     fn scheme_with_sys(pairs: &[(&str, [u8; 3])]) -> ThemeScheme {
@@ -10411,5 +13249,710 @@
             let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
             let render = |root: &Element| render_chart(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "").unwrap();
             assert_eq!(render(&doc.root), render(&reference.root), "{first}+{second} {base}");
+        }
+    }
+
+    fn official_like_3d_xml(kind: &str, extra_wrapper: &str, extra_chart: &str) -> String {
+        let rot_y = if kind == "pie3DChart" { "0" } else { "20" };
+        let series = if kind == "pie3DChart" {
+            r#"<c:ser>
+          <c:idx val="0"/><c:order val="0"/><c:tx><c:v>F24S1</c:v></c:tx>
+          <c:cat><c:strLit><c:ptCount val="4"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt><c:pt idx="3"><c:v>D</c:v></c:pt></c:strLit></c:cat>
+          <c:val><c:numLit><c:ptCount val="4"/><c:pt idx="0"><c:v>10</c:v></c:pt><c:pt idx="1"><c:v>20</c:v></c:pt><c:pt idx="2"><c:v>30</c:v></c:pt><c:pt idx="3"><c:v>40</c:v></c:pt></c:numLit></c:val>
+        </c:ser>"#
+                .to_string()
+        } else {
+            let one = |order: usize, name: &str, a: i32, b: i32, c: i32, d: i32| {
+                format!(
+                    r#"<c:ser>
+          <c:idx val="{order}"/><c:order val="{order}"/><c:tx><c:v>{name}</c:v></c:tx>
+          <c:cat><c:strLit><c:ptCount val="4"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt><c:pt idx="3"><c:v>D</c:v></c:pt></c:strLit></c:cat>
+          <c:val><c:numLit><c:ptCount val="4"/><c:pt idx="0"><c:v>{a}</c:v></c:pt><c:pt idx="1"><c:v>{b}</c:v></c:pt><c:pt idx="2"><c:v>{c}</c:v></c:pt><c:pt idx="3"><c:v>{d}</c:v></c:pt></c:numLit></c:val>
+        </c:ser>"#
+                )
+            };
+            format!(
+                "{}{}{}",
+                one(0, "F24S1", 10, 20, 30, 40),
+                one(1, "F24S2", 20, 10, 20, 10),
+                one(2, "F24S3", 20, 30, 10, 20)
+            )
+        };
+        let head = match kind {
+            "bar3DChart" => r#"<c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#,
+            "line3DChart" => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#,
+            "area3DChart" => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#,
+            "pie3DChart" => r#"<c:varyColors val="1"/>"#,
+            // Omitted wireframe is the official-like exportable case (same as val="0").
+            "surface3DChart" => "",
+            _ => "",
+        };
+        let axes = if kind == "pie3DChart" {
+            String::new()
+        } else {
+            let mid = if matches!(kind, "area3DChart" | "surface3DChart") {
+                "midCat"
+            } else {
+                "between"
+            };
+            format!(
+                r#"<c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="{mid}"/><c:majorUnit val="20"/></c:valAx>
+      <c:serAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/></c:serAx>"#
+            )
+        };
+        let ax_ids = if kind == "pie3DChart" {
+            ""
+        } else {
+            r#"<c:axId val="1"/><c:axId val="2"/><c:axId val="3"/>"#
+        };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    {extra_chart}
+    <c:view3D><c:rotX val="15"/><c:rotY val="{rot_y}"/><c:rAngAx val="0"/></c:view3D>
+    <c:plotArea>
+      <c:{kind}>
+        {head}
+        {series}
+        {extra_wrapper}
+        {ax_ids}
+      </c:{kind}>
+      {axes}
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn count_nonwhite_rgb(rgb: &[u8]) -> usize {
+        rgb.chunks_exact(3)
+            .filter(|p| *p != [255, 255, 255])
+            .count()
+    }
+
+    #[test]
+    fn official_like_3d_charts_export_and_paint_ink() {
+        // Official F24 Chart.Export gold exists for these five wrappers.
+        // Close-enough projection must produce an image with real ink.
+        // Residual pixels vs official gold stay on the review page; this
+        // is not a unique official-matrix lock and does not claim 0-diff.
+        for kind in [
+            "bar3DChart",
+            "line3DChart",
+            "area3DChart",
+            "pie3DChart",
+            "surface3DChart",
+        ] {
+            // Official pie3D gold writes hidden dLbls plus showLeaderLines=1.
+            let pie_dlbls = r#"<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/><c:showLeaderLines val="1"/></c:dLbls>"#;
+            let extra = if kind == "pie3DChart" { pie_dlbls } else { "" };
+            let xml = official_like_3d_xml(kind, extra, "");
+            let png = render_line(&xml).unwrap_or_else(|err| {
+                panic!("{kind} must export; got {:?} {}", err.code(), err)
+            });
+            let (_w, _h, rgb) = png_rgb(&png);
+            let ink = count_nonwhite_rgb(&rgb);
+            assert!(ink >= 80, "{kind} must paint ink, got {ink}");
+        }
+    }
+
+    #[test]
+    fn leftover_3d_variants_without_official_gold_stay_not_implemented() {
+        let cases = [
+            official_like_3d_xml("bar3DChart", "", "")
+                .replace(r#"barDir val="col""#, r#"barDir val="bar""#),
+            official_like_3d_xml("bar3DChart", "", "").replace(
+                r#"grouping val="clustered""#,
+                r#"grouping val="stacked""#,
+            ),
+            official_like_3d_xml("bar3DChart", r#"<c:shape val="cone"/>"#, ""),
+            official_like_3d_xml("line3DChart", "", "").replace(
+                r#"grouping val="standard""#,
+                r#"grouping val="stacked""#,
+            ),
+            official_like_3d_xml("area3DChart", "", "").replace(
+                r#"grouping val="standard""#,
+                r#"grouping val="percentStacked""#,
+            ),
+            official_like_3d_xml("surface3DChart", r#"<c:wireframe val="1"/>"#, ""),
+            official_like_3d_xml(
+                "bar3DChart",
+                r#"<c:dLbls><c:showVal val="1"/></c:dLbls>"#,
+                "",
+            ),
+            official_like_3d_xml(
+                "pie3DChart",
+                r#"<c:dLbls><c:showVal val="1"/></c:dLbls>"#,
+                "",
+            ),
+        ];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_line(xml).expect_err(&format!("leftover 3D case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover 3D case {i} should stay NotImplemented"
+            );
+        }
+    }
+
+    fn hidden_dlbls() -> &'static str {
+        r#"<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/><c:showLeaderLines val="1"/></c:dLbls>"#
+    }
+
+    fn cats_ab() -> &'static str {
+        r#"<c:cat><c:strLit><c:ptCount val="4"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt><c:pt idx="3"><c:v>D</c:v></c:pt></c:strLit></c:cat>"#
+    }
+
+    fn val_pts(vals: &str) -> String {
+        let parts: Vec<&str> = vals.split(',').collect();
+        let mut pts = String::new();
+        for (i, v) in parts.iter().enumerate() {
+            pts.push_str(&format!(r#"<c:pt idx="{i}"><c:v>{v}</c:v></c:pt>"#));
+        }
+        format!(
+            r#"<c:val><c:numLit><c:ptCount val="{}"/>{pts}</c:numLit></c:val>"#,
+            parts.len()
+        )
+    }
+
+    fn f25_ser(order: usize, name: &str, vals: &str, extra: &str) -> String {
+        format!(
+            r#"<c:ser>
+          <c:idx val="{order}"/><c:order val="{order}"/><c:tx><c:v>{name}</c:v></c:tx>
+          {cats}
+          {val}
+          {extra}
+        </c:ser>"#,
+            cats = cats_ab(),
+            val = val_pts(vals),
+        )
+    }
+
+    fn official_like_doughnut_xml() -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:plotArea>
+      <c:doughnutChart>
+        <c:varyColors val="1"/>
+        {ser}
+        {dlbls}
+        <c:firstSliceAng val="0"/>
+        <c:holeSize val="50"/>
+      </c:doughnutChart>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#,
+            ser = f25_ser(0, "F25S1", "10,20,30,40", ""),
+            dlbls = hidden_dlbls(),
+        )
+    }
+
+    fn official_like_ofpie_xml() -> String {
+        let cats = r#"<c:cat><c:strLit><c:ptCount val="7"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt><c:pt idx="3"><c:v>D</c:v></c:pt><c:pt idx="4"><c:v>E</c:v></c:pt><c:pt idx="5"><c:v>F</c:v></c:pt><c:pt idx="6"><c:v>G</c:v></c:pt></c:strLit></c:cat>"#;
+        let val = val_pts("40,25,15,10,8,6,5");
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:plotArea>
+      <c:ofPieChart>
+        <c:ofPieType val="pie"/>
+        <c:varyColors val="1"/>
+        <c:ser>
+          <c:idx val="0"/><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx>
+          {cats}
+          {val}
+        </c:ser>
+        {dlbls}
+        <c:gapWidth val="150"/>
+        <c:secondPieSize val="75"/>
+        <c:serLines/>
+      </c:ofPieChart>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#,
+            dlbls = hidden_dlbls(),
+        )
+    }
+
+    fn official_like_radar_xml() -> String {
+        let marker = r#"<c:marker></c:marker>"#;
+        let series = format!(
+            "{}{}{}",
+            f25_ser(0, "F25S1", "10,20,30,40", marker),
+            f25_ser(1, "F25S2", "20,10,20,10", marker),
+            f25_ser(2, "F25S3", "20,30,10,20", marker),
+        );
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:plotArea>
+      <c:radarChart>
+        <c:radarStyle val="marker"/>
+        <c:varyColors val="0"/>
+        {series}
+        {dlbls}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:radarChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#,
+            dlbls = hidden_dlbls(),
+        )
+    }
+
+    fn official_like_bubble_xml() -> String {
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:plotArea>
+      <c:bubbleChart>
+        <c:varyColors val="0"/>
+        <c:ser>
+          <c:idx val="0"/><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx>
+          <c:xVal><c:strLit><c:ptCount val="5"/><c:pt idx="0"><c:v>X</c:v></c:pt><c:pt idx="1"><c:v>10</c:v></c:pt><c:pt idx="2"><c:v>20</c:v></c:pt><c:pt idx="3"><c:v>30</c:v></c:pt><c:pt idx="4"><c:v>40</c:v></c:pt></c:strLit></c:xVal>
+          <c:yVal><c:numLit><c:ptCount val="5"/><c:pt idx="0"><c:v>0</c:v></c:pt><c:pt idx="1"><c:v>10</c:v></c:pt><c:pt idx="2"><c:v>20</c:v></c:pt><c:pt idx="3"><c:v>30</c:v></c:pt><c:pt idx="4"><c:v>40</c:v></c:pt></c:numLit></c:yVal>
+          <c:bubbleSize><c:numLit><c:ptCount val="5"/><c:pt idx="0"><c:v>0</c:v></c:pt><c:pt idx="1"><c:v>10</c:v></c:pt><c:pt idx="2"><c:v>20</c:v></c:pt><c:pt idx="3"><c:v>15</c:v></c:pt><c:pt idx="4"><c:v>25</c:v></c:pt></c:numLit></c:bubbleSize>
+          <c:bubble3D val="0"/>
+        </c:ser>
+        <c:bubbleScale val="100"/>
+        <c:showNegBubbles val="0"/>
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:bubbleChart>
+      <c:valAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/><c:max val="50"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/><c:majorUnit val="10"/></c:valAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="50"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/><c:majorUnit val="10"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+            .to_string()
+    }
+
+    fn official_like_stock_xml() -> String {
+        let cat = r#"<c:cat><c:numLit><c:ptCount val="4"/><c:pt idx="0"><c:v>46023</c:v></c:pt><c:pt idx="1"><c:v>46024</c:v></c:pt><c:pt idx="2"><c:v>46025</c:v></c:pt><c:pt idx="3"><c:v>46026</c:v></c:pt></c:numLit></c:cat>"#;
+        let ser = |order: usize, name: &str, vals: &str, extra: &str| {
+            format!(
+                r#"<c:ser>
+          <c:idx val="{order}"/><c:order val="{order}"/><c:tx><c:v>{name}</c:v></c:tx>
+          {cat}
+          {val}
+          {extra}
+        </c:ser>"#,
+                val = val_pts(vals),
+            )
+        };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:plotArea>
+      <c:stockChart>
+        {high}{low}{close}
+        <c:hiLowLines/>
+        {dlbls}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:stockChart>
+      <c:dateAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:numFmt formatCode="yyyy\-mm\-dd" sourceLinked="1"/><c:crossAx val="2"/><c:crosses val="autoZero"/><c:baseTimeUnit val="days"/></c:dateAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#,
+            high = ser(0, "High", "40,45,50,48", r#"<c:marker><c:symbol val="none"/></c:marker>"#),
+            low = ser(1, "Low", "20,25,30,28", r#"<c:marker><c:symbol val="none"/></c:marker>"#),
+            close = ser(2, "Close", "30,35,40,36", r#"<c:spPr><a:ln><a:solidFill><a:srgbClr val="196B24"/></a:solidFill></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill><a:srgbClr val="196B24"/></a:solidFill></c:spPr></c:marker>"#),
+            dlbls = hidden_dlbls(),
+        )
+    }
+
+    fn official_like_surface_top_xml() -> String {
+        let series = format!(
+            "{}{}{}",
+            f25_ser(0, "F25S1", "10,20,30,40", ""),
+            f25_ser(1, "F25S2", "20,10,20,10", ""),
+            f25_ser(2, "F25S3", "20,30,10,20", ""),
+        );
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:view3D><c:rotX val="90"/><c:rotY val="0"/><c:rAngAx val="0"/><c:perspective val="0"/></c:view3D>
+    <c:plotArea>
+      <c:surfaceChart>
+        {series}
+        <c:axId val="1"/><c:axId val="2"/><c:axId val="3"/>
+      </c:surfaceChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="none"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/><c:majorUnit val="20"/></c:valAx>
+      <c:serAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/></c:serAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    #[test]
+    fn excel_serial_formats_official_stock_dates() {
+        assert_eq!(format_excel_date(46023.0), "2026-01-01");
+        assert_eq!(format_excel_date(46024.0), "2026-01-02");
+        assert_eq!(format_excel_date(46025.0), "2026-01-03");
+        assert_eq!(format_excel_date(46026.0), "2026-01-04");
+    }
+
+    #[test]
+    fn official_like_f25_other_types_export_and_paint_ink() {
+        // Official F25 Chart.Export gold exists for these six wrappers.
+        // Close-enough painters must produce an image with real ink.
+        // Residual pixels vs official gold stay on the review page; this
+        // is not a unique official-matrix lock and does not claim 0-diff.
+        let cases = [
+            ("doughnutChart", official_like_doughnut_xml()),
+            ("ofPieChart", official_like_ofpie_xml()),
+            ("radarChart", official_like_radar_xml()),
+            ("bubbleChart", official_like_bubble_xml()),
+            ("stockChart", official_like_stock_xml()),
+            ("surfaceChart", official_like_surface_top_xml()),
+        ];
+        for (kind, xml) in cases {
+            let png = render_line(&xml).unwrap_or_else(|err| {
+                panic!("{kind} must export; got {:?} {}", err.code(), err)
+            });
+            let (_w, _h, rgb) = png_rgb(&png);
+            let ink = count_nonwhite_rgb(&rgb);
+            assert!(ink >= 80, "{kind} must paint ink, got {ink}");
+        }
+    }
+
+    #[test]
+    fn leftover_f25_variants_without_official_gold_stay_not_implemented() {
+        let cases = [
+            official_like_doughnut_xml().replace(r#"holeSize val="50""#, r#"holeSize val="5""#),
+            official_like_ofpie_xml().replace(r#"ofPieType val="pie""#, r#"ofPieType val="bar""#),
+            official_like_ofpie_xml().replace(
+                r#"<c:gapWidth val="150"/>"#,
+                r#"<c:splitType val="cust"/><c:gapWidth val="150"/>"#,
+            ),
+            official_like_radar_xml()
+                .replace(r#"radarStyle val="marker""#, r#"radarStyle val="filled""#),
+            official_like_radar_xml()
+                .replace(r#"radarStyle val="marker""#, r#"radarStyle val="standard""#),
+            official_like_bubble_xml().replace(r#"bubble3D val="0""#, r#"bubble3D val="1""#),
+            official_like_bubble_xml()
+                .replace(r#"showNegBubbles val="0""#, r#"showNegBubbles val="1""#),
+            official_like_stock_xml().replace(
+                r#"<c:hiLowLines/>"#,
+                r#"<c:hiLowLines/><c:upDownBars><c:gapWidth val="150"/></c:upDownBars>"#,
+            ),
+            official_like_surface_top_xml().replace(
+                r#"<c:surfaceChart>"#,
+                r#"<c:surfaceChart><c:wireframe val="1"/>"#,
+            ),
+            official_like_surface_top_xml().replace(r#"rotX val="90""#, r#"rotX val="15""#),
+        ];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_line(xml).expect_err(&format!("leftover F25 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F25 case {i} should stay NotImplemented"
+            );
+        }
+    }
+
+    fn f26_ser(order: usize, name: &str, vals: &str, extra: &str) -> String {
+        format!(
+            r#"<c:ser>
+          <c:idx val="{order}"/><c:order val="{order}"/><c:tx><c:v>{name}</c:v></c:tx>
+          {cats}
+          {val}
+          {extra}
+        </c:ser>"#,
+            cats = cats_ab(),
+            val = val_pts(vals),
+        )
+    }
+
+    fn f26_line_marker() -> &'static str {
+        r#"<c:marker><c:symbol val="none"/></c:marker>"#
+    }
+
+    fn f26_shared_axes() -> &'static str {
+        r#"<c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>"#
+    }
+
+    fn official_like_f26_space(title: &str, plot: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr/></a:pPr><a:r><a:t>{title}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
+    <c:plotArea>
+      {plot}
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn official_like_f26_col_line_primary_xml() -> String {
+        let plot = format!(
+            r#"<c:barChart>
+        <c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+        {s1}
+        {dlbls}
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:lineChart>
+        <c:grouping val="standard"/><c:varyColors val="0"/>
+        {s2}
+        {dlbls}
+        <c:smooth val="0"/><c:axId val="1"/><c:axId val="2"/>
+      </c:lineChart>
+      {axes}"#,
+            s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+            s2 = f26_ser(1, "F26S2", "20,10,20,10", f26_line_marker()),
+            dlbls = hidden_dlbls(),
+            axes = f26_shared_axes(),
+        );
+        official_like_f26_space("F26-1", &plot)
+    }
+
+    fn official_like_f26_col_col_line_xml() -> String {
+        let plot = format!(
+            r#"<c:barChart>
+        <c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+        {s1}{s2}
+        {dlbls}
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:lineChart>
+        <c:grouping val="standard"/><c:varyColors val="0"/>
+        {s3}
+        {dlbls}
+        <c:smooth val="0"/><c:axId val="1"/><c:axId val="2"/>
+      </c:lineChart>
+      {axes}"#,
+            s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+            s2 = f26_ser(1, "F26S2", "20,10,20,10", ""),
+            s3 = f26_ser(2, "F26S3", "20,30,10,20", f26_line_marker()),
+            dlbls = hidden_dlbls(),
+            axes = f26_shared_axes(),
+        );
+        official_like_f26_space("F26-2", &plot)
+    }
+
+    fn official_like_f26_col_line_secondary_xml() -> String {
+        let plot = format!(
+            r#"<c:barChart>
+        <c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+        {s1}
+        {dlbls}
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:lineChart>
+        <c:grouping val="standard"/><c:varyColors val="0"/>
+        {s2}
+        {dlbls}
+        <c:smooth val="0"/><c:axId val="3"/><c:axId val="4"/>
+      </c:lineChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>
+      <c:valAx><c:axId val="4"/><c:scaling><c:orientation val="minMax"/><c:max val="50"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="r"/><c:crossAx val="3"/><c:crosses val="max"/><c:crossBetween val="between"/><c:majorUnit val="10"/></c:valAx>
+      <c:catAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="b"/><c:crossAx val="4"/></c:catAx>"#,
+            s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+            s2 = f26_ser(1, "F26S2", "20,10,20,10", f26_line_marker()),
+            dlbls = hidden_dlbls(),
+        );
+        official_like_f26_space("F26-3", &plot)
+    }
+
+    fn official_like_f26_col_area_primary_xml() -> String {
+        let plot = format!(
+            r#"<c:areaChart>
+        <c:grouping val="standard"/><c:varyColors val="0"/>
+        {s2}
+        {dlbls}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:areaChart>
+      <c:barChart>
+        <c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+        {s1}
+        {dlbls}
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      {axes}"#,
+            s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+            s2 = f26_ser(1, "F26S2", "20,10,20,10", ""),
+            dlbls = hidden_dlbls(),
+            axes = f26_shared_axes(),
+        );
+        official_like_f26_space("F26-4", &plot)
+    }
+
+    fn official_like_f26_bar_line_mixed_xml() -> String {
+        let plot = format!(
+            r#"<c:barChart>
+        <c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+        {s1}
+        {dlbls}
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:lineChart>
+        <c:grouping val="standard"/><c:varyColors val="0"/>
+        {s2}
+        {dlbls}
+        <c:smooth val="0"/><c:axId val="3"/><c:axId val="4"/>
+      </c:lineChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>
+      <c:valAx><c:axId val="4"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="r"/><c:crossAx val="3"/><c:crosses val="max"/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="b"/><c:crossAx val="4"/></c:catAx>"#,
+            s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+            s2 = f26_ser(1, "F26S2", "20,10,20,10", f26_line_marker()),
+            dlbls = hidden_dlbls(),
+        );
+        official_like_f26_space("F26-5", &plot)
+    }
+
+    #[test]
+    fn official_like_f26_combo_charts_export_and_paint_ink() {
+        // Official F26 Chart.Export gold exists for these combo encodings.
+        // Close-enough painters must produce an image with real ink.
+        // Residual pixels vs official gold stay on the review page; this
+        // is not a unique official-matrix lock, not a general F26 combo
+        // lock, and does not claim 0-diff. F26-3 reuses the already
+        // landed F21-8 column+line secondary path.
+        let cases = [
+            ("col-line-primary", official_like_f26_col_line_primary_xml()),
+            ("col-col-line", official_like_f26_col_col_line_xml()),
+            ("col-line-secondary", official_like_f26_col_line_secondary_xml()),
+            ("col-area-primary", official_like_f26_col_area_primary_xml()),
+            ("bar-line-primary", official_like_f26_bar_line_mixed_xml()),
+        ];
+        for (kind, xml) in cases {
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+                .unwrap_or_else(|err| panic!("{kind} must read; got {:?} {}", err.code(), err));
+            match kind {
+                "col-line-primary" => {
+                    assert_eq!(chart.series.len(), 2);
+                    assert!(matches!(chart.series[0].plot_kind, PlotKind::ClusteredColumn));
+                    assert!(matches!(chart.series[1].plot_kind, PlotKind::StandardLine));
+                    assert!(!chart.series[0].on_secondary && !chart.series[1].on_secondary);
+                    assert!(!chart.secondary_line_on_right);
+                }
+                "col-col-line" => {
+                    assert_eq!(chart.series.len(), 3);
+                    assert!(matches!(chart.series[0].plot_kind, PlotKind::ClusteredColumn));
+                    assert!(matches!(chart.series[1].plot_kind, PlotKind::ClusteredColumn));
+                    assert!(matches!(chart.series[2].plot_kind, PlotKind::StandardLine));
+                }
+                "col-line-secondary" => {
+                    assert!(matches!(chart.series[0].plot_kind, PlotKind::ClusteredColumn));
+                    assert!(matches!(chart.series[1].plot_kind, PlotKind::StandardLine));
+                    assert!(!chart.series[0].on_secondary && chart.series[1].on_secondary);
+                    assert!(!chart.secondary_line_on_right);
+                }
+                "col-area-primary" => {
+                    assert!(matches!(chart.series[0].plot_kind, PlotKind::ClusteredColumn));
+                    assert!(matches!(chart.series[1].plot_kind, PlotKind::StandardArea));
+                    assert!(!chart.area_midcat);
+                }
+                "bar-line-primary" => {
+                    assert!(matches!(chart.kind, PlotKind::ClusteredBar));
+                    assert!(matches!(chart.series[0].plot_kind, PlotKind::ClusteredBar));
+                    assert!(matches!(chart.series[1].plot_kind, PlotKind::StandardLine));
+                    assert!(!chart.series[0].on_secondary && chart.series[1].on_secondary);
+                    assert!(chart.secondary_line_on_right);
+                }
+                _ => {}
+            }
+            let png = render_line(&xml).unwrap_or_else(|err| {
+                panic!("{kind} must export; got {:?} {}", err.code(), err)
+            });
+            let (_w, _h, rgb) = png_rgb(&png);
+            let ink = count_nonwhite_rgb(&rgb);
+            assert!(ink >= 80, "{kind} must paint ink, got {ink}");
+        }
+    }
+
+    #[test]
+    fn leftover_f26_variants_without_official_gold_stay_not_implemented() {
+        let three_col = official_like_f26_col_col_line_xml().replace(
+            &f26_ser(1, "F26S2", "20,10,20,10", ""),
+            &format!(
+                "{}{}",
+                f26_ser(1, "F26S2", "20,10,20,10", ""),
+                f26_ser(3, "F26S4", "15,15,15,15", ""),
+            ),
+        );
+        let line_area = official_like_f26_space(
+            "NI",
+            &format!(
+                r#"<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>{s1}{dlbls}<c:smooth val="0"/><c:axId val="1"/><c:axId val="2"/></c:lineChart>
+      <c:areaChart><c:grouping val="standard"/><c:varyColors val="0"/>{s2}{dlbls}<c:axId val="1"/><c:axId val="2"/></c:areaChart>
+      {axes}"#,
+                s1 = f26_ser(0, "F26S1", "10,20,30,40", f26_line_marker()),
+                s2 = f26_ser(1, "F26S2", "20,10,20,10", ""),
+                dlbls = hidden_dlbls(),
+                axes = f26_shared_axes(),
+            ),
+        );
+        let stacked = official_like_f26_col_line_primary_xml().replace(
+            r#"<c:grouping val="clustered"/>"#,
+            r#"<c:grouping val="stacked"/>"#,
+        );
+        let smooth = official_like_f26_col_line_primary_xml().replace(
+            r#"<c:smooth val="0"/>"#,
+            r#"<c:smooth val="1"/>"#,
+        );
+        let marked = official_like_f26_col_line_primary_xml().replace(
+            r#"<c:marker><c:symbol val="none"/></c:marker>"#,
+            r#"<c:marker><c:symbol val="circle"/></c:marker>"#,
+        );
+        let three_wrappers = official_like_f26_col_line_primary_xml().replace(
+            r#"</c:lineChart>"#,
+            &format!(
+                r#"</c:lineChart>
+      <c:areaChart><c:grouping val="standard"/><c:varyColors val="0"/>{}{}<c:axId val="1"/><c:axId val="2"/></c:areaChart>"#,
+                f26_ser(2, "F26S3", "20,30,10,20", ""),
+                hidden_dlbls(),
+            ),
+        );
+        let bar_area = official_like_f26_space(
+            "NI",
+            &format!(
+                r#"<c:barChart><c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/>{s1}{dlbls}<c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart>
+      <c:areaChart><c:grouping val="standard"/><c:varyColors val="0"/>{s2}{dlbls}<c:axId val="1"/><c:axId val="2"/></c:areaChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>"#,
+                s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+                s2 = f26_ser(1, "F26S2", "20,10,20,10", ""),
+                dlbls = hidden_dlbls(),
+            ),
+        );
+        let cases = [three_col, line_area, stacked, smooth, marked, three_wrappers, bar_area];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_line(xml).expect_err(&format!("leftover F26 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F26 case {i} should stay NotImplemented"
+            );
         }
     }

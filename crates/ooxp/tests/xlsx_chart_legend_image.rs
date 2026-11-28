@@ -147,10 +147,11 @@ fn valid_unimplemented_complex_text_is_not_silently_ignored() {
     ] { assert!(bytes(&format!("<c:legend><c:txPr>{content}</c:txPr></c:legend>")).is_err(), "{content}"); }
 
     assert!(bytes(
-        "<c:legend><c:txPr><a:p><a:pPr><a:defRPr u='sng'/></a:pPr></a:p></c:txPr></c:legend>"
+        "<c:legend><c:txPr><a:p><a:pPr><a:defRPr u='wavy'/></a:pPr></a:p></c:txPr></c:legend>"
     )
     .is_err());
-    assert!(bytes("<c:legend><c:layout><c:manualLayout><c:wMode val='edge'/><c:w val='.4'/></c:manualLayout></c:layout></c:legend>").is_err());
+    assert!(bytes("<c:legend><c:layout><c:manualLayout><c:wMode val='edge'/><c:w val='.4'/></c:manualLayout></c:layout></c:legend>").is_ok());
+    assert!(bytes("<c:legend><c:layout><c:manualLayout><c:layoutTarget val='other'/><c:w val='.4'/></c:manualLayout></c:layout></c:legend>").is_err());
 }
 
 #[test]
@@ -275,7 +276,29 @@ fn entry_font_size_bold_and_family_have_real_ink_and_pack_together() {
         "><a:latin typeface='Arial'/><a:cs typeface='Courier New'/> "
     ))
     .is_err());
-    assert!(bytes(&legend("u='sng'>")).is_err());
+    assert!(bytes(&legend("u='wavy'>")).is_err());
+}
+
+#[test]
+fn official_like_legend_underline_strike_and_subscript_export() {
+    let ctrl = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/></c:legend>";
+    let underline = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr u='sng'/></a:pPr><a:endParaRPr lang='zh-CN'/></a:p></c:txPr></c:legend>";
+    let strike = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr strike='sngStrike'/></a:pPr><a:endParaRPr lang='zh-CN'/></a:p></c:txPr></c:legend>";
+    let sub = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr baseline='-25000'/></a:pPr><a:endParaRPr lang='zh-CN'/></a:p></c:txPr></c:legend>";
+    let dbl = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr u='dbl'/></a:pPr><a:endParaRPr lang='zh-CN'/></a:p></c:txPr></c:legend>";
+    let (cw, ch, cp) = pixels(ctrl);
+    for (name, xml) in [
+        ("underline", underline),
+        ("strike", strike),
+        ("subscript", sub),
+        ("doubleunderline", dbl),
+    ] {
+        let (w, h, p) = pixels(xml);
+        assert_eq!((cw, ch), (w, h), "{name} must not grow the canvas");
+        assert_ne!(bytes(ctrl).unwrap(), bytes(xml).unwrap(), "{name}");
+        let changed = cp.iter().zip(&p).filter(|(a, b)| a != b).count();
+        assert!(changed > 10, "{name} changed={changed}");
+    }
 }
 
 #[test]
@@ -316,9 +339,65 @@ fn legend_solid_alpha_and_explicit_rectangular_border_paint_in_all_positions() {
 }
 #[test]
 fn unimplemented_legend_effects_gradients_and_complex_lines_remain_explicit_ni() {
-    for sp in ["<a:gradFill/>","<a:effectLst><a:outerShdw/></a:effectLst>","<a:ln w='25400'><a:prstDash val='dash'/><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln>","<a:ln><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln>","<a:solidFill><a:schemeClr val='accent1'/></a:solidFill>"] {
-        assert!(bytes(&format!("<c:legend><c:legendPos val='r'/><c:spPr>{sp}</c:spPr></c:legend>")).is_err(),"{sp}");
+    for sp in [
+        "<a:gradFill/>",
+        "<a:effectLst><a:innerShdw/></a:effectLst>",
+        "<a:effectLst><a:glow/></a:effectLst>",
+        "<a:ln w='25400'><a:prstDash val='dash'/><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln>",
+        "<a:ln><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln>",
+        "<a:solidFill><a:schemeClr val='accent1'/></a:solidFill>",
+    ] {
+        assert!(
+            bytes(&format!(
+                "<c:legend><c:legendPos val='r'/><c:spPr>{sp}</c:spPr></c:legend>"
+            ))
+            .is_err(),
+            "{sp}"
+        );
     }
+}
+
+#[test]
+fn official_like_legend_linear_gradient_and_outer_shadow_export() {
+    let ctrl = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/></c:legend>";
+    let grad = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='FF0000'/></a:gs><a:gs pos='100000'><a:srgbClr val='FFFFFF'/></a:gs></a:gsLst><a:lin ang='5400000' scaled='1'/><a:tileRect/></a:gradFill></c:spPr></c:legend>";
+    let shadow = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:spPr><a:effectLst><a:outerShdw blurRad='50800' dist='71842' dir='2700013' rotWithShape='0'><a:srgbClr val='000000'><a:alpha val='60000'/></a:srgbClr></a:outerShdw></a:effectLst></c:spPr></c:legend>";
+    let empty_shadow = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:spPr><a:effectLst><a:outerShdw/></a:effectLst></c:spPr></c:legend>";
+    let (cw, ch, _) = pixels(ctrl);
+    let (gw, gh, gp) = pixels(grad);
+    let (sw, sh, spx) = pixels(shadow);
+    let (ew, eh, _) = pixels(empty_shadow);
+    assert_eq!((cw, ch), (gw, gh), "gradFill must not grow the canvas");
+    assert_eq!((cw, ch), (sw, sh), "outerShdw must not grow the canvas");
+    assert_eq!((cw, ch), (ew, eh));
+    assert_eq!(bytes(ctrl).unwrap(), bytes(empty_shadow).unwrap());
+    assert_ne!(bytes(ctrl).unwrap(), bytes(grad).unwrap());
+    assert_ne!(bytes(ctrl).unwrap(), bytes(shadow).unwrap());
+    // Close-enough evidence only: a vertical sRGB gradient appears in the
+    // right legend band, and an official-like shadow darkens chart-fill
+    // pixels there. Residuals are not a unique official-matrix lock.
+    let reds = gp
+        .iter()
+        .enumerate()
+        .filter(|(i, c)| i % gw > gw * 2 / 3 && c[0] > 200 && c[1] < 80 && c[2] < 80)
+        .count();
+    assert!(reds > 20, "legend gradFill reds={reds}");
+    let fill = [234_u8, 247, 247];
+    let darkened = spx
+        .iter()
+        .enumerate()
+        .filter(|(i, c)| {
+            i % sw > sw * 2 / 3
+                && c[0] < fill[0]
+                && c[1] < fill[1]
+                && c[2] < fill[2]
+                && **c != [0, 0, 0]
+                && **c != [137, 137, 137]
+                && **c != [21, 96, 130]
+                && **c != [233, 113, 50]
+        })
+        .count();
+    assert!(darkened > 20, "legend outerShdw darkened={darkened}");
 }
 
 #[test]

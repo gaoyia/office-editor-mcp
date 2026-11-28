@@ -895,6 +895,13 @@ mod win {
                 .unwrap_or(12.0)
         }
 
+        /// GDI TEXTMETRIC descent, used for close-enough underline placement.
+        pub fn descent(&self) -> f64 {
+            self.text_metric()
+                .map(|m| f64::from(m.descent))
+                .unwrap_or(0.0)
+        }
+
         /// Design ascent + descent at this face's point size and export DPI.
         /// Unlike TEXTMETRIC height this excludes device-rounded internal/extra
         /// leading, so different families retain their real typographic cells.
@@ -2557,6 +2564,9 @@ impl Face {
     }
 
     pub fn line_height(&self) -> f64 {
+        0.0
+    }
+    pub fn descent(&self) -> f64 {
         0.0
     }
     pub fn cell_height(&self) -> Option<f64> {

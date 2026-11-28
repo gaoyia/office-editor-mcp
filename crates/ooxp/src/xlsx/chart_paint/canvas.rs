@@ -1,3 +1,6 @@
+use std::collections::BTreeMap;
+use std::io::Cursor;
+
 use crate::error::{Error, ErrorKind};
 
 use super::*;
@@ -18,9 +21,13 @@ pub(super) struct Canvas {
     pub(super) alpha: Option<Vec<u8>>,
     pub(super) rounded_frame: bool,
     pub(super) chart_border: bool,
+    pub(super) chart_line: Option<FrameLine>,
+    pub(super) plot_line: Option<FrameLine>,
+    pub(super) chart_shadow: Option<OuterShadow>,
     pub(super) custom_dash_budget: usize,
     pub(super) plot_fill: Option<PlotPaint>,
     pub(super) dpi: RenderDpi,
+    pub(super) blips: BTreeMap<String, Vec<u8>>,
 }
 
 pub(super) fn angle_in_wedge(dx: f64, dy: f64, start_deg: f64, end_deg: f64) -> bool {
@@ -93,9 +100,13 @@ impl Canvas {
             alpha: None,
             rounded_frame: true,
             chart_border: true,
+            chart_line: None,
+            plot_line: None,
+            chart_shadow: None,
             custom_dash_budget: MAX_CUSTOM_DASH_PIECES,
             plot_fill: None,
             dpi,
+            blips: BTreeMap::new(),
         }
     }
 
@@ -181,22 +192,263 @@ impl Canvas {
     /// Area coverage of an axis-aligned floating rectangle. Pie plot bounds
     /// are point-derived and must not be shifted/truncated to match one gold.
     pub(super) fn fill_fractional_rect(&mut self, rect: &Rect, color: [u8; 3]) {
+        self.fill_fractional_rect_cov(rect, color, 255);
+    }
+
+    pub(super) fn fill_fractional_rect_cov(&mut self, rect: &Rect, color: [u8; 3], alpha: u8) {
+        if alpha == 0 {
+            return;
+        }
         let right = rect.x + rect.w;
         let bottom = rect.y + rect.h;
         for y in (rect.y.floor() as i32).max(0)..(bottom.ceil() as i32).min(self.h as i32) {
             let cy = (bottom.min(f64::from(y) + 1.0) - rect.y.max(f64::from(y))).clamp(0.0, 1.0);
             for x in (rect.x.floor() as i32).max(0)..(right.ceil() as i32).min(self.w as i32) {
                 let cx = (right.min(f64::from(x) + 1.0) - rect.x.max(f64::from(x))).clamp(0.0, 1.0);
-                self.blend(x, y, color, (cx * cy * 255.0).round() as u8);
+                self.blend(x, y, color, (cx * cy * f64::from(alpha)).round() as u8);
             }
         }
     }
 
-    pub(super) fn paint_plot(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, fill: PlotPaint) {
+    pub(super) fn paint_fractional_plot(&mut self, rect: &Rect, fill: PlotPaint) -> Result<(), Error> {
+        match fill {
+            PlotPaint::Solid(color, 255) => self.fill_fractional_rect(rect, color),
+            PlotPaint::Solid(color, cov) => self.fill_fractional_rect_cov(rect, color, cov),
+            PlotPaint::Linear(grad) => self.fill_fractional_linear(rect, &grad),
+            PlotPaint::Pattern(patt) => self.fill_fractional_pattern(rect, &patt),
+            PlotPaint::Blip(blip) => self.fill_fractional_blip(rect, &blip)?,
+        }
+        Ok(())
+    }
+
+    pub(super) fn fill_fractional_linear(&mut self, rect: &Rect, grad: &LinearFrameGrad) {
+        if rect.w <= 0.0 || rect.h <= 0.0 {
+            return;
+        }
+        let right = rect.x + rect.w;
+        let bottom = rect.y + rect.h;
+        let axis = grad.is_axis_locked();
+        let opaque = grad.stops.is_opaque();
+        for y in (rect.y.floor() as i32).max(0)..(bottom.ceil() as i32).min(self.h as i32) {
+            let cy = (bottom.min(f64::from(y) + 1.0) - rect.y.max(f64::from(y))).clamp(0.0, 1.0);
+            for x in (rect.x.floor() as i32).max(0)..(right.ceil() as i32).min(self.w as i32) {
+                let cx = (right.min(f64::from(x) + 1.0) - rect.x.max(f64::from(x))).clamp(0.0, 1.0);
+                let cov = (cx * cy * 255.0).round() as u8;
+                if cov == 0 {
+                    continue;
+                }
+                let t = if axis {
+                    if grad.ang == LINEAR_ANG_VERTICAL {
+                        (f64::from(y) + 0.5 - rect.y) / rect.h
+                    } else {
+                        (f64::from(x) + 0.5 - rect.x) / rect.w
+                    }
+                } else {
+                    gradient_t(
+                        f64::from(x) + 0.5,
+                        f64::from(y) + 0.5,
+                        rect.x,
+                        rect.y,
+                        rect.w,
+                        rect.h,
+                        grad,
+                    )
+                };
+                if opaque {
+                    self.blend(x, y, grad.sample(t), cov);
+                } else {
+                    let (rgb, a) = grad.sample_rgba(t);
+                    let cov = ((u16::from(cov) * u16::from(a) + 127) / 255) as u8;
+                    self.blend(x, y, rgb, cov);
+                }
+            }
+        }
+    }
+
+    pub(super) fn fill_fractional_pattern(&mut self, rect: &Rect, patt: &pattern::PatternFill) {
+        let right = rect.x + rect.w;
+        let bottom = rect.y + rect.h;
+        let dpi = self.dpi.get();
+        for y in (rect.y.floor() as i32).max(0)..(bottom.ceil() as i32).min(self.h as i32) {
+            let cy = (bottom.min(f64::from(y) + 1.0) - rect.y.max(f64::from(y))).clamp(0.0, 1.0);
+            for x in (rect.x.floor() as i32).max(0)..(right.ceil() as i32).min(self.w as i32) {
+                let cx = (right.min(f64::from(x) + 1.0) - rect.x.max(f64::from(x))).clamp(0.0, 1.0);
+                let cov = (cx * cy * 255.0).round() as u8;
+                if cov == 0 {
+                    continue;
+                }
+                self.blend(x, y, patt.color_at(x, y, dpi), cov);
+            }
+        }
+    }
+
+    pub(super) fn fill_fractional_blip(
+        &mut self,
+        rect: &Rect,
+        blip: &pattern::BlipFill,
+    ) -> Result<(), Error> {
+        let x0 = rect.x.floor() as i32;
+        let y0 = rect.y.floor() as i32;
+        let x1 = (rect.x + rect.w).ceil() as i32;
+        let y1 = (rect.y + rect.h).ceil() as i32;
+        self.paint_blip_rect(x0, y0, x1, y1, blip)?;
+        // Re-apply fractional edge coverage by not overwriting outside the
+        // floating rect: paint_blip_rect is integer-bounded; edge residual
+        // stays on the review page. The pie square uses this same bound as
+        // the opaque solid path's integer hull, then slices paint on top.
+        Ok(())
+    }
+
+    pub(super) fn paint_plot(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, fill: PlotPaint) -> Result<(), Error> {
         match fill {
             PlotPaint::Solid(color, cov) => self.fill_rect_cov(x0, y0, x1, y1, color, cov),
             PlotPaint::Linear(grad) => self.fill_linear_rect(x0, y0, x1, y1, &grad),
+            PlotPaint::Pattern(patt) => self.fill_pattern_rect(x0, y0, x1, y1, &patt),
+            PlotPaint::Blip(blip) => self.paint_blip_rect(x0, y0, x1, y1, &blip)?,
         }
+        Ok(())
+    }
+
+    pub(super) fn fill_pattern_rect(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        patt: &pattern::PatternFill,
+    ) {
+        let x0c = x0.max(0);
+        let y0c = y0.max(0);
+        let x1c = x1.min(self.w as i32);
+        let y1c = y1.min(self.h as i32);
+        let dpi = self.dpi.get();
+        for y in y0c..y1c {
+            for x in x0c..x1c {
+                self.blend(x, y, patt.color_at(x, y, dpi), 255);
+            }
+        }
+    }
+
+    pub(super) fn paint_blip_rect(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        blip: &pattern::BlipFill,
+    ) -> Result<(), Error> {
+        let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+        let dest_w = x1.saturating_sub(x0);
+        let dest_h = y1.saturating_sub(y0);
+        if dest_w <= 0 || dest_h <= 0 {
+            return Ok(());
+        }
+        let dest_w = dest_w as u32;
+        let dest_h = dest_h as u32;
+        let bytes = self.blips.get(&blip.embed).ok_or_else(unsupported)?;
+        let image = decode_blip_png(bytes)?;
+        let (crop, crop_w, crop_h) = crop_blip(&image, blip.src_rect);
+        let (fx0, fy0, fw, fh) = fill_rect_window(dest_w, dest_h, blip.fill_rect);
+        if fw == 0 || fh == 0 {
+            return Ok(());
+        }
+        if let Some(tile) = blip.tile.as_ref() {
+            self.paint_blip_tiled(
+                x0, y0, dest_w, dest_h, fx0, fy0, fw, fh, &crop, crop_w, crop_h, tile, blip.dpi,
+            );
+            return Ok(());
+        }
+        // Locked stretch foundation when src/fill rects are empty or zero, plus
+        // close-enough shrink/crop/inset so those variants still export.
+        let scaled = scale_blip_rgba(&crop, crop_w, crop_h, fw, fh)?;
+        for dy in 0..fh as i32 {
+            let y = y0 + fy0 as i32 + dy;
+            if y < 0 || y >= self.h as i32 {
+                continue;
+            }
+            for dx in 0..fw as i32 {
+                let x = x0 + fx0 as i32 + dx;
+                if x < 0 || x >= self.w as i32 {
+                    continue;
+                }
+                let i = ((dy as u32 * fw + dx as u32) * 4) as usize;
+                let a = scaled[i + 3];
+                if a == 0 {
+                    continue;
+                }
+                self.blend(x, y, [scaled[i], scaled[i + 1], scaled[i + 2]], a);
+            }
+        }
+        Ok(())
+    }
+
+    fn paint_blip_tiled(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        dest_w: u32,
+        dest_h: u32,
+        fx0: u32,
+        fy0: u32,
+        fw: u32,
+        fh: u32,
+        crop: &[u8],
+        crop_w: u32,
+        crop_h: u32,
+        tile: &pattern::BlipTile,
+        dpi: u32,
+    ) {
+        let sx = if tile.sx == 0 { 100_000.0 } else { tile.sx as f64 / 100_000.0 };
+        let sy = if tile.sy == 0 { 100_000.0 } else { tile.sy as f64 / 100_000.0 };
+        let dpi_scale = if dpi == 0 {
+            1.0
+        } else {
+            f64::from(self.dpi.get()) / f64::from(dpi)
+        };
+        let tile_w = ((f64::from(crop_w) * sx * dpi_scale).round() as u32).clamp(1, MAX_PX);
+        let tile_h = ((f64::from(crop_h) * sy * dpi_scale).round() as u32).clamp(1, MAX_PX);
+        let Ok(cell) = scale_blip_rgba(crop, crop_w, crop_h, tile_w, tile_h) else {
+            return;
+        };
+        let emu = f64::from(self.dpi.get()) / 914_400.0;
+        let ox = tile.tx as f64 * emu;
+        let oy = tile.ty as f64 * emu;
+        let (ax, ay) = tile.algn.origin_frac();
+        let origin_x = ax * f64::from(fw) - ax * f64::from(tile_w) - ox;
+        let origin_y = ay * f64::from(fh) - ay * f64::from(tile_h) - oy;
+        let tw = f64::from(tile_w);
+        let th = f64::from(tile_h);
+        for dy in 0..fh as i32 {
+            let y = y0 + fy0 as i32 + dy;
+            if y < 0 || y >= self.h as i32 {
+                continue;
+            }
+            for dx in 0..fw as i32 {
+                let x = x0 + fx0 as i32 + dx;
+                if x < 0 || x >= self.w as i32 {
+                    continue;
+                }
+                let mut lx = (f64::from(dx) + 0.5 - origin_x).rem_euclid(tw);
+                let mut ly = (f64::from(dy) + 0.5 - origin_y).rem_euclid(th);
+                match tile.flip {
+                    pattern::BlipFlip::X | pattern::BlipFlip::Xy => lx = tw - 1.0 - lx,
+                    _ => {}
+                }
+                match tile.flip {
+                    pattern::BlipFlip::Y | pattern::BlipFlip::Xy => ly = th - 1.0 - ly,
+                    _ => {}
+                }
+                let tx = lx.floor().clamp(0.0, tw - 1.0) as u32;
+                let ty = ly.floor().clamp(0.0, th - 1.0) as u32;
+                let i = ((ty * tile_w + tx) * 4) as usize;
+                let a = cell[i + 3];
+                if a == 0 {
+                    continue;
+                }
+                self.blend(x, y, [cell[i], cell[i + 1], cell[i + 2]], a);
+            }
+        }
+        let _ = (dest_w, dest_h);
     }
 
     /// Existing axis-aligned pixel-center geometry. Cache at most one clipped
@@ -212,16 +464,41 @@ impl Canvas {
         if w <= 0.0 || h <= 0.0 || x1c <= x0c || y1c <= y0c {
             return;
         }
-        let vertical = grad.ang == LINEAR_ANG_VERTICAL;
-        let colors: Vec<[u8; 3]> = if vertical {
-            (y0c..y1c).map(|y| grad.sample((f64::from(y - y0) + 0.5) / h)).collect()
-        } else {
-            (x0c..x1c).map(|x| grad.sample((f64::from(x - x0) + 0.5) / w)).collect()
-        };
+        if grad.is_axis_locked() && grad.stops.is_opaque() {
+            // Existing axis-aligned pixel-center geometry. Cache at most one clipped
+            // axis (<= canvas edge) so many-stop interval searches are not per pixel.
+            // Neither the two-stop interpolation nor border/plot geometry is changed.
+            let vertical = grad.ang == LINEAR_ANG_VERTICAL;
+            let colors: Vec<[u8; 3]> = if vertical {
+                (y0c..y1c).map(|y| grad.sample((f64::from(y - y0) + 0.5) / h)).collect()
+            } else {
+                (x0c..x1c).map(|x| grad.sample((f64::from(x - x0) + 0.5) / w)).collect()
+            };
+            for y in y0c..y1c {
+                for x in x0c..x1c {
+                    let index = if vertical { y - y0c } else { x - x0c } as usize;
+                    self.blend(x, y, colors[index], 255);
+                }
+            }
+            return;
+        }
         for y in y0c..y1c {
             for x in x0c..x1c {
-                let index = if vertical { y - y0c } else { x - x0c } as usize;
-                self.blend(x, y, colors[index], 255);
+                let t = gradient_t(
+                    f64::from(x) + 0.5,
+                    f64::from(y) + 0.5,
+                    f64::from(x0),
+                    f64::from(y0),
+                    w,
+                    h,
+                    grad,
+                );
+                if grad.stops.is_opaque() {
+                    self.blend(x, y, grad.sample(t), 255);
+                } else {
+                    let (rgb, a) = grad.sample_rgba(t);
+                    self.blend(x, y, rgb, a);
+                }
             }
         }
     }
@@ -229,6 +506,38 @@ impl Canvas {
     /// Opaque even-odd fill using pixel centers. Shared edges of split
     /// trapezoids are not double-counted, and later series overwrite earlier ones.
     pub(super) fn fill_polygon(&mut self, pts: &[(f64, f64)], color: [u8; 3]) {
+        self.fill_polygon_alpha(pts, color, 255);
+    }
+
+    /// Fill a polygon with straight-alpha coverage. alpha 0 is a no-op.
+    pub(super) fn fill_polygon_alpha(&mut self, pts: &[(f64, f64)], color: [u8; 3], alpha: u8) {
+        if alpha == 0 {
+            return;
+        }
+        self.for_each_polygon_pixel(pts, |canvas, x, y| {
+            canvas.blend(x, y, color, alpha);
+        });
+    }
+
+    /// Sample the existing general pattern RULE at canvas pixels inside the
+    /// area polygon. This is not a frame-rectangle fill.
+    pub(super) fn fill_polygon_pattern(
+        &mut self,
+        pts: &[(f64, f64)],
+        patt: &super::pattern::PatternFill,
+    ) {
+        let dpi = self.dpi.get();
+        self.for_each_polygon_pixel(pts, |canvas, x, y| {
+            let color = patt.color_at(x, y, dpi);
+            canvas.blend(x, y, color, 255);
+        });
+    }
+
+    fn for_each_polygon_pixel(
+        &mut self,
+        pts: &[(f64, f64)],
+        mut paint: impl FnMut(&mut Self, i32, i32),
+    ) {
         if pts.len() < 3 || pts.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {
             return;
         }
@@ -257,7 +566,7 @@ impl Canvas {
                 let px = f64::from(x) + 0.5;
                 let py = f64::from(y) + 0.5;
                 if point_in_polygon(px, py, pts) {
-                    self.blend(x, y, color, 255);
+                    paint(self, x, y);
                 }
             }
         }
@@ -307,6 +616,188 @@ impl Canvas {
                 }
                 if span >= 360.0 - 1e-9 || angle_in_wedge(dx, dy, start_deg, end_deg) {
                     self.blend(x, y, color, cov);
+                }
+            }
+        }
+    }
+
+    /// Linear fill sampled in a caller-supplied rectangle (the pie plot
+    /// square), not the host chart frame. Pixel centers use the existing
+    /// `gradient_t` / `sample_rgba` path. Close-enough, not a unique lock.
+    pub(super) fn fill_wedge_linear(
+        &mut self,
+        cx: f64,
+        cy: f64,
+        radius: f64,
+        start_deg: f64,
+        end_deg: f64,
+        grad: &LinearFrameGrad,
+        origin_x: f64,
+        origin_y: f64,
+        w: f64,
+        h: f64,
+    ) {
+        if radius <= 0.0
+            || !cx.is_finite()
+            || !cy.is_finite()
+            || !radius.is_finite()
+            || !start_deg.is_finite()
+            || !end_deg.is_finite()
+            || !origin_x.is_finite()
+            || !origin_y.is_finite()
+            || !w.is_finite()
+            || !h.is_finite()
+            || w <= 0.0
+            || h <= 0.0
+        {
+            return;
+        }
+        let span = end_deg - start_deg;
+        if span <= 1e-9 {
+            return;
+        }
+        let pad = radius + 1.0;
+        let min_x = (cx - pad).floor() as i32;
+        let min_y = (cy - pad).floor() as i32;
+        let max_x = (cx + pad).ceil() as i32;
+        let max_y = (cy + pad).ceil() as i32;
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                let dx = px - cx;
+                let dy = py - cy;
+                let dist = dx.hypot(dy);
+                let cov = coverage(dist, radius);
+                if cov == 0 {
+                    continue;
+                }
+                if span >= 360.0 - 1e-9 || angle_in_wedge(dx, dy, start_deg, end_deg) {
+                    let t = gradient_t(px, py, origin_x, origin_y, w, h, grad);
+                    let (color, alpha) = grad.sample_rgba(t);
+                    let cov = ((u16::from(cov) * u16::from(alpha) + 127) / 255) as u8;
+                    if cov != 0 {
+                        self.blend(x, y, color, cov);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Clockwise ring wedge: same angle rule as fill_wedge, with an inner
+    /// hole. holeSize is a percent of the outer radius (inner = outer * hole/100).
+    pub(super) fn fill_ring_wedge(
+        &mut self,
+        cx: f64,
+        cy: f64,
+        inner: f64,
+        outer: f64,
+        start_deg: f64,
+        end_deg: f64,
+        color: [u8; 3],
+        alpha: u8,
+    ) {
+        if outer <= 0.0
+            || !cx.is_finite()
+            || !cy.is_finite()
+            || !inner.is_finite()
+            || !outer.is_finite()
+            || !start_deg.is_finite()
+            || !end_deg.is_finite()
+        {
+            return;
+        }
+        let inner = inner.clamp(0.0, outer);
+        let span = end_deg - start_deg;
+        if span <= 1e-9 {
+            return;
+        }
+        let pad = outer + 1.0;
+        let min_x = (cx - pad).floor() as i32;
+        let min_y = (cy - pad).floor() as i32;
+        let max_x = (cx + pad).ceil() as i32;
+        let max_y = (cy + pad).ceil() as i32;
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                let dx = px - cx;
+                let dy = py - cy;
+                let dist = dx.hypot(dy);
+                let outer_cov = coverage(dist, outer);
+                let inner_cov = if inner > 0.0 { coverage(dist, inner) } else { 0 };
+                let ring = outer_cov.saturating_sub(inner_cov);
+                let cov = ((u16::from(ring) * u16::from(alpha) + 127) / 255) as u8;
+                if cov == 0 {
+                    continue;
+                }
+                if span >= 360.0 - 1e-9 || angle_in_wedge(dx, dy, start_deg, end_deg) {
+                    self.blend(x, y, color, cov);
+                }
+            }
+        }
+    }
+
+    pub(super) fn fill_ring_wedge_linear(
+        &mut self,
+        cx: f64,
+        cy: f64,
+        inner: f64,
+        outer: f64,
+        start_deg: f64,
+        end_deg: f64,
+        grad: &LinearFrameGrad,
+        origin_x: f64,
+        origin_y: f64,
+        w: f64,
+        h: f64,
+    ) {
+        if outer <= 0.0
+            || !cx.is_finite()
+            || !cy.is_finite()
+            || !inner.is_finite()
+            || !outer.is_finite()
+            || !start_deg.is_finite()
+            || !end_deg.is_finite()
+            || !origin_x.is_finite()
+            || !origin_y.is_finite()
+            || !w.is_finite()
+            || !h.is_finite()
+            || w <= 0.0
+            || h <= 0.0
+        {
+            return;
+        }
+        let inner = inner.clamp(0.0, outer);
+        let span = end_deg - start_deg;
+        if span <= 1e-9 {
+            return;
+        }
+        let pad = outer + 1.0;
+        let min_x = (cx - pad).floor() as i32;
+        let min_y = (cy - pad).floor() as i32;
+        let max_x = (cx + pad).ceil() as i32;
+        let max_y = (cy + pad).ceil() as i32;
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                let dx = px - cx;
+                let dy = py - cy;
+                let dist = dx.hypot(dy);
+                let outer_cov = coverage(dist, outer);
+                let inner_cov = if inner > 0.0 { coverage(dist, inner) } else { 0 };
+                let ring = outer_cov.saturating_sub(inner_cov);
+                if ring == 0 {
+                    continue;
+                }
+                if span >= 360.0 - 1e-9 || angle_in_wedge(dx, dy, start_deg, end_deg) {
+                    let t = gradient_t(px, py, origin_x, origin_y, w, h, grad);
+                    let (color, alpha) = grad.sample_rgba(t);
+                    let cov = ((u16::from(ring) * u16::from(alpha) + 127) / 255) as u8;
+                    if cov != 0 {
+                        self.blend(x, y, color, cov);
+                    }
                 }
             }
         }
@@ -477,6 +968,312 @@ impl Canvas {
         }
     }
 
+
+    pub(super) fn finish_excel_frame(&mut self, plot: Option<&Rect>) {
+        if self.chart_border {
+            self.stroke_border(BORDER);
+        } else if self.rounded_frame {
+            self.clip_rounded_silhouette();
+        }
+        if let Some(line) = self.chart_line.clone() {
+            self.stroke_frame_rect(0.0, 0.0, f64::from(self.w), f64::from(self.h), &line);
+        }
+        if let (Some(line), Some(plot)) = (self.plot_line.clone(), plot) {
+            self.stroke_frame_rect(plot.x, plot.y, plot.x + plot.w, plot.y + plot.h, &line);
+        }
+    }
+
+    /// Punch the locked rounded-frame outside corners without painting the
+    /// default gray border. Same `CORNER_R` / `rad = CORNER_R - 0.5` geometry
+    /// as `stroke_quarter`, so rounded + `a:ln`/`a:noFill` can export.
+    pub(super) fn clip_rounded_silhouette(&mut self) {
+        let w = self.w as i32;
+        let h = self.h as i32;
+        let r = CORNER_R.min(w / 2).min(h / 2);
+        if r < 2 {
+            return;
+        }
+        if self.alpha.is_none() {
+            self.alpha = Some(vec![255; (self.w as usize) * (self.h as usize)]);
+        }
+        self.clip_rounded_quarter(r, r, 0, r, 0, r);
+        self.clip_rounded_quarter(w - r, r, w - r, w - 1, 0, r);
+        self.clip_rounded_quarter(r, h - r, 0, r, h - r, h - 1);
+        self.clip_rounded_quarter(w - r, h - r, w - r, w - 1, h - r, h - 1);
+    }
+
+    fn clip_rounded_quarter(&mut self, cx: i32, cy: i32, x0: i32, x1: i32, y0: i32, y1: i32) {
+        let rad = f64::from(cx.min(cy).min(CORNER_R)) - 0.5;
+        let cx = f64::from(cx);
+        let cy = f64::from(cy);
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let dx = f64::from(x) + 0.5 - cx;
+                let dy = f64::from(y) + 0.5 - cy;
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist < rad {
+                    continue;
+                }
+                let coverage = ((1.0 - (dist - rad)).clamp(0.0, 1.0) * 255.0).round() as u8;
+                let i = y as usize * self.w as usize + x as usize;
+                if let Some(alpha) = &mut self.alpha {
+                    alpha[i] = ((u16::from(alpha[i]) * u16::from(coverage) + 127) / 255) as u8;
+                }
+                if coverage == 0 {
+                    self.px[i * 3..i * 3 + 3].copy_from_slice(&[0; 3]);
+                }
+            }
+        }
+    }
+
+    /// Center-aligned solid stroke on a rectangle, converted with
+    /// `emu_to_px_f` (not the series-pen snap). Half the stroke may clip at
+    /// the canvas edge; official Chart.Export sometimes grows the bitmap.
+    /// Size residuals stay on the review page. Not a unique lock.
+    pub(super) fn stroke_frame_rect(
+        &mut self,
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+        line: &FrameLine,
+    ) {
+        let width = self.dpi.emu_to_px_f(line.width_emu);
+        if !width.is_finite() || width <= 0.0 {
+            return;
+        }
+        let inset = 0.5;
+        let ax = x0 + inset;
+        let ay = y0 + inset;
+        let bx = x1 - inset;
+        let by = y1 - inset;
+        if bx <= ax || by <= ay {
+            return;
+        }
+        // Official F08 strokes are opaque. Non-255 line alpha is multiplied
+        // as a close-enough coverage scale, not a unique compositing lock.
+        if line.alpha == 0 {
+            return;
+        }
+        self.stroke_segment(ax, ay, bx, ay, width, line.color);
+        self.stroke_segment(bx, ay, bx, by, width, line.color);
+        self.stroke_segment(bx, by, ax, by, width, line.color);
+        self.stroke_segment(ax, by, ax, ay, width, line.color);
+        let _ = line.alpha;
+    }
+
+    /// Offset + two-pass box blur behind the already-painted chart, with a
+    /// close-enough canvas expand of `ceil(blur ± offset)` on each side.
+    /// DrawingML `dir` is 1/60000 degree; 0 is +x, and +dir goes clockwise
+    /// in this y-down buffer (`dx = dist*cos`, `dy = dist*sin`) so official
+    /// 45° (2_700_000) is down-right. Default color is opaque black when
+    /// unspecified. Not a unique size or alpha lock; residuals stay on the
+    /// review page.
+    pub(super) fn apply_outer_shadow(&mut self, shadow: &OuterShadow) {
+        let blur_px = self.dpi.emu_to_px_f(shadow.blur_emu).max(0.0);
+        let dist_px = self.dpi.emu_to_px_f(shadow.dist_emu).max(0.0);
+        let theta = (shadow.dir as f64) / 60_000.0 * std::f64::consts::PI / 180.0;
+        let dx = dist_px * theta.cos();
+        let dy = dist_px * theta.sin();
+        let pad_l = ((blur_px - dx.min(0.0)).ceil() as i32).max(0);
+        let pad_t = ((blur_px - dy.min(0.0)).ceil() as i32).max(0);
+        let pad_r = ((blur_px + dx.max(0.0)).ceil() as i32).max(0);
+        let pad_b = ((blur_px + dy.max(0.0)).ceil() as i32).max(0);
+        if pad_l == 0 && pad_t == 0 && pad_r == 0 && pad_b == 0 {
+            return;
+        }
+        let src_w = self.w;
+        let src_h = self.h;
+        let src_n = (src_w as usize) * (src_h as usize);
+        let src_a = self
+            .alpha
+            .clone()
+            .unwrap_or_else(|| vec![255; src_n]);
+        let nw = (src_w as i32 + pad_l + pad_r) as u32;
+        let nh = (src_h as i32 + pad_t + pad_b) as u32;
+        let dest_n = (nw as usize) * (nh as usize);
+        let mut shadow_a = vec![0.0_f32; dest_n];
+        let ox = dx.round() as i32;
+        let oy = dy.round() as i32;
+        let scale = f32::from(shadow.alpha) / 255.0;
+        for y in 0..src_h as i32 {
+            for x in 0..src_w as i32 {
+                let a = f32::from(src_a[(y as u32 * src_w + x as u32) as usize]) / 255.0 * scale;
+                if a <= 0.0 {
+                    continue;
+                }
+                let dx_ = x + pad_l + ox;
+                let dy_ = y + pad_t + oy;
+                if dx_ >= 0 && dy_ >= 0 && dx_ < nw as i32 && dy_ < nh as i32 {
+                    let i = (dy_ as u32 * nw + dx_ as u32) as usize;
+                    shadow_a[i] = (shadow_a[i] + a).min(1.0);
+                }
+            }
+        }
+        if blur_px > 0.5 {
+            let radius = blur_px.round().max(1.0) as i32;
+            shadow_a = box_blur_approx(nw, nh, &shadow_a, radius);
+        }
+        let mut npx = vec![0_u8; dest_n * 3];
+        let mut na = vec![0_u8; dest_n];
+        for (i, &cover) in shadow_a.iter().enumerate() {
+            let a8 = (cover.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+            if a8 > 0 {
+                npx[i * 3..i * 3 + 3].copy_from_slice(&shadow.color);
+                na[i] = a8;
+            }
+        }
+        for y in 0..src_h {
+            for x in 0..src_w {
+                let si = (y * src_w + x) as usize;
+                let sa = src_a[si];
+                if sa == 0 {
+                    continue;
+                }
+                let di = ((y as i32 + pad_t) as u32 * nw + (x as i32 + pad_l) as u32) as usize;
+                let sr = self.px[si * 3];
+                let sg = self.px[si * 3 + 1];
+                let sb = self.px[si * 3 + 2];
+                if sa == 255 {
+                    npx[di * 3] = sr;
+                    npx[di * 3 + 1] = sg;
+                    npx[di * 3 + 2] = sb;
+                    na[di] = 255;
+                    continue;
+                }
+                let src_af = f32::from(sa) / 255.0;
+                let dst_af = f32::from(na[di]) / 255.0;
+                let out_a = src_af + dst_af * (1.0 - src_af);
+                if out_a <= 0.0 {
+                    continue;
+                }
+                let dst_w = dst_af * (1.0 - src_af);
+                let inv = 1.0 / out_a;
+                npx[di * 3] = ((f32::from(sr) * src_af + f32::from(npx[di * 3]) * dst_w) * inv + 0.5) as u8;
+                npx[di * 3 + 1] =
+                    ((f32::from(sg) * src_af + f32::from(npx[di * 3 + 1]) * dst_w) * inv + 0.5) as u8;
+                npx[di * 3 + 2] =
+                    ((f32::from(sb) * src_af + f32::from(npx[di * 3 + 2]) * dst_w) * inv + 0.5) as u8;
+                na[di] = (out_a * 255.0 + 0.5) as u8;
+            }
+        }
+        self.w = nw;
+        self.h = nh;
+        self.px = npx;
+        self.alpha = Some(na);
+    }
+
+    /// Close-enough legend-frame `a:outerShdw`. Uses the same EMU, dir, and
+    /// box-blur conversion as chart-area shadows, but paints only the legend
+    /// rectangle and never grows the canvas. Zero dist and blur are a no-op
+    /// so a bare `outerShdw` still exports. Not a unique official lock.
+    pub(super) fn fill_outer_shadow_rect(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        shadow: &OuterShadow,
+    ) {
+        let blur_px = self.dpi.emu_to_px_f(shadow.blur_emu).max(0.0);
+        let dist_px = self.dpi.emu_to_px_f(shadow.dist_emu).max(0.0);
+        if blur_px <= 0.5 && dist_px <= 0.0 {
+            return;
+        }
+        if x1 <= x0 || y1 <= y0 {
+            return;
+        }
+        let theta = (shadow.dir as f64) / 60_000.0 * std::f64::consts::PI / 180.0;
+        let dx = dist_px * theta.cos();
+        let dy = dist_px * theta.sin();
+        let ox = dx.round() as i32;
+        let oy = dy.round() as i32;
+        let radius = if blur_px > 0.5 {
+            blur_px.round().max(1.0) as i32
+        } else {
+            0
+        };
+        let bx0 = x0 + ox - radius;
+        let by0 = y0 + oy - radius;
+        let bx1 = x1 + ox + radius;
+        let by1 = y1 + oy + radius;
+        let bw = bx1 - bx0;
+        let bh = by1 - by0;
+        if bw <= 0 || bh <= 0 {
+            return;
+        }
+        let mut shadow_a = vec![0.0_f32; (bw as usize) * (bh as usize)];
+        let scale = f32::from(shadow.alpha) / 255.0;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let dx_ = x + ox - bx0;
+                let dy_ = y + oy - by0;
+                if dx_ >= 0 && dy_ >= 0 && dx_ < bw && dy_ < bh {
+                    let i = (dy_ * bw + dx_) as usize;
+                    shadow_a[i] = (shadow_a[i] + scale).min(1.0);
+                }
+            }
+        }
+        if radius > 0 {
+            shadow_a = box_blur_approx(bw as u32, bh as u32, &shadow_a, radius);
+        }
+        for y in 0..bh {
+            for x in 0..bw {
+                let cover = shadow_a[(y * bw + x) as usize];
+                let a8 = (cover.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                if a8 == 0 {
+                    continue;
+                }
+                self.blend(bx0 + x, by0 + y, shadow.color, a8);
+            }
+        }
+    }
+}
+
+fn box_blur_approx(w: u32, h: u32, src: &[f32], radius: i32) -> Vec<f32> {
+    // Two successive box blurs stand in for a Gaussian. Close-enough, not a
+    // unique official blur-kernel lock.
+    let once = box_blur_pass(w, h, src, radius);
+    box_blur_pass(w, h, &once, radius)
+}
+
+fn box_blur_pass(w: u32, h: u32, src: &[f32], radius: i32) -> Vec<f32> {
+    let (wi, hi) = (w as i32, h as i32);
+    let clamp = |x: i32, y: i32| {
+        let x = x.clamp(0, wi - 1) as u32;
+        let y = y.clamp(0, hi - 1) as u32;
+        src[(y * w + x) as usize]
+    };
+    let denom = (2 * radius + 1) as f32;
+    let mut tmp = vec![0.0_f32; src.len()];
+    for y in 0..hi {
+        for x in 0..wi {
+            let mut s = 0.0;
+            for k in -radius..=radius {
+                s += clamp(x + k, y);
+            }
+            tmp[(y as u32 * w + x as u32) as usize] = s / denom;
+        }
+    }
+    let mut out = vec![0.0_f32; src.len()];
+    let clamp_t = |x: i32, y: i32| {
+        let x = x.clamp(0, wi - 1) as u32;
+        let y = y.clamp(0, hi - 1) as u32;
+        tmp[(y * w + x) as usize]
+    };
+    for y in 0..hi {
+        for x in 0..wi {
+            let mut s = 0.0;
+            for k in -radius..=radius {
+                s += clamp_t(x, y + k);
+            }
+            out[(y as u32 * w + x as u32) as usize] = s / denom;
+        }
+    }
+    out
+}
+
+impl Canvas {
     pub(super) fn stroke_border(&mut self, color: [u8; 3]) {
         let w = self.w as i32;
         let h = self.h as i32;
@@ -579,4 +1376,125 @@ pub(super) fn encode_png(
         .map_err(|_| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
     drop(writer);
     Ok(out)
+}
+
+
+struct BlipRgba {
+    w: u32,
+    h: u32,
+    px: Vec<u8>,
+}
+
+
+fn crop_blip(image: &BlipRgba, src_rect: Option<[i64; 4]>) -> (Vec<u8>, u32, u32) {
+    let Some(rect) = src_rect else {
+        return (image.px.clone(), image.w, image.h);
+    };
+    if rect == [0, 0, 0, 0] {
+        return (image.px.clone(), image.w, image.h);
+    }
+    let w = f64::from(image.w);
+    let h = f64::from(image.h);
+    let x0 = ((rect[0] as f64 / 100_000.0) * w).round().clamp(0.0, w - 1.0) as u32;
+    let y0 = ((rect[1] as f64 / 100_000.0) * h).round().clamp(0.0, h - 1.0) as u32;
+    let x1 = (((100_000 - rect[2]) as f64 / 100_000.0) * w)
+        .round()
+        .clamp(f64::from(x0) + 1.0, w) as u32;
+    let y1 = (((100_000 - rect[3]) as f64 / 100_000.0) * h)
+        .round()
+        .clamp(f64::from(y0) + 1.0, h) as u32;
+    let cw = (x1 - x0).max(1);
+    let ch = (y1 - y0).max(1);
+    let mut out = vec![0u8; cw as usize * ch as usize * 4];
+    for y in 0..ch {
+        let si = (((y0 + y) * image.w + x0) * 4) as usize;
+        let di = (y * cw * 4) as usize;
+        out[di..di + cw as usize * 4].copy_from_slice(&image.px[si..si + cw as usize * 4]);
+    }
+    (out, cw, ch)
+}
+
+fn fill_rect_window(dest_w: u32, dest_h: u32, fill_rect: Option<[i64; 4]>) -> (u32, u32, u32, u32) {
+    let Some(rect) = fill_rect else {
+        return (0, 0, dest_w, dest_h);
+    };
+    if rect == [0, 0, 0, 0] {
+        return (0, 0, dest_w, dest_h);
+    }
+    let w = f64::from(dest_w);
+    let h = f64::from(dest_h);
+    let x0 = ((rect[0] as f64 / 100_000.0) * w).round().clamp(0.0, w) as u32;
+    let y0 = ((rect[1] as f64 / 100_000.0) * h).round().clamp(0.0, h) as u32;
+    let x1 = (((100_000 - rect[2]) as f64 / 100_000.0) * w)
+        .round()
+        .clamp(f64::from(x0), w) as u32;
+    let y1 = (((100_000 - rect[3]) as f64 / 100_000.0) * h)
+        .round()
+        .clamp(f64::from(y0), h) as u32;
+    (x0, y0, (x1 - x0).max(0), (y1 - y0).max(0))
+}
+
+fn scale_blip_rgba(src: &[u8], src_w: u32, src_h: u32, dest_w: u32, dest_h: u32) -> Result<Vec<u8>, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if dest_w == 0 || dest_h == 0 || dest_w > MAX_PX || dest_h > MAX_PX {
+        return Err(unsupported());
+    }
+    if dest_w == src_w && dest_h == src_h {
+        return Ok(src.to_vec());
+    }
+    if let Some(px) = super::super::chart_gdi::scale_device_rgba(src, src_w, src_h, dest_w, dest_h) {
+        return Ok(px);
+    }
+    Ok(nearest_upscale(src, src_w, src_h, dest_w, dest_h))
+}
+
+fn decode_blip_png(bytes: &[u8]) -> Result<BlipRgba, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err(unsupported());
+    }
+    let decoder = png::Decoder::new(Cursor::new(bytes));
+    let mut reader = decoder.read_info().map_err(|_| unsupported())?;
+    if reader.info().bit_depth != png::BitDepth::Eight {
+        return Err(unsupported());
+    }
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let frame = reader.next_frame(&mut buf).map_err(|_| unsupported())?;
+    if frame.width == 0 || frame.height == 0 || frame.width > MAX_PX || frame.height > MAX_PX {
+        return Err(unsupported());
+    }
+    let raw = &buf[..frame.buffer_size()];
+    let px = match frame.color_type {
+        png::ColorType::Rgb => {
+            let mut out = Vec::with_capacity(raw.len() / 3 * 4);
+            for chunk in raw.chunks_exact(3) {
+                out.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
+            }
+            out
+        }
+        png::ColorType::Rgba => raw.to_vec(),
+        _ => return Err(unsupported()),
+    };
+    if px.len() != (frame.width as usize) * (frame.height as usize) * 4 {
+        return Err(unsupported());
+    }
+    Ok(BlipRgba {
+        w: frame.width,
+        h: frame.height,
+        px,
+    })
+}
+
+fn nearest_upscale(src: &[u8], src_w: u32, src_h: u32, dest_w: u32, dest_h: u32) -> Vec<u8> {
+    let mut out = vec![0u8; dest_w as usize * dest_h as usize * 4];
+    for y in 0..dest_h {
+        let sy = ((u64::from(y) * u64::from(src_h)) / u64::from(dest_h)) as u32;
+        for x in 0..dest_w {
+            let sx = ((u64::from(x) * u64::from(src_w)) / u64::from(dest_w)) as u32;
+            let si = (sy * src_w + sx) as usize * 4;
+            let di = (y * dest_w + x) as usize * 4;
+            out[di..di + 4].copy_from_slice(&src[si..si + 4]);
+        }
+    }
+    out
 }

@@ -240,7 +240,7 @@ fn read_existing_pie_chart_part_exports_and_unsupported_details_stay_ni() {
 
     let doughnut = xml
         .replace("<c:pieChart>", "<c:doughnutChart>")
-        .replace("</c:pieChart>", "</c:doughnutChart>");
+        .replace("</c:pieChart>", r#"<c:holeSize val="5"/></c:doughnutChart>"#);
     let doughnut_path = tmp("read-doughnut");
     rewrite_part(&book, &doughnut_path, &part, &doughnut);
     let err = export_chart_png(&doughnut_path, "sheet:Sheet1/chart:1", "doughnut-png").unwrap_err();
@@ -334,7 +334,7 @@ fn chartsheet_standard_pie_png_matches_chart_image_and_unsupported_stays_ni() {
 
     let doughnut = xml
         .replace("<c:pieChart>", "<c:doughnutChart>")
-        .replace("</c:pieChart>", "</c:doughnutChart>");
+        .replace("</c:pieChart>", r#"<c:holeSize val="5"/></c:doughnutChart>"#);
     let doughnut_path = tmp("cs-doughnut");
     rewrite_part(&pie, &doughnut_path, &chart_part(&pie), &doughnut);
     for (action, id, tag) in [

@@ -1004,6 +1004,149 @@ impl LinearFrameGrad {
             segment.encoded_srgb()
         }
     }
+
+    /// RGB follows `sample`; alpha is a straight lerp in the same interval.
+    /// Close-enough for transparent stops: not a unique official RGB/alpha lock.
+    pub(super) fn sample_rgba(&self, t: f64) -> ([u8; 3], u8) {
+        let rgb = self.sample(t);
+        let alpha = self
+            .stops
+            .segment(t)
+            .map(gradient::Segment::lerp_alpha)
+            .unwrap_or(255);
+        (rgb, alpha)
+    }
+}
+
+/// Pixel-center parameter in a fill rectangle. The locked 0/90 linear
+/// geometry is bit-identical to the existing axis-aligned formula. Other
+/// angles project onto the bbox; path shades use a radial/Chebyshev t.
+/// Those non-axis cases are close-enough, not unique official locks.
+pub(super) fn gradient_t(
+    px: f64,
+    py: f64,
+    origin_x: f64,
+    origin_y: f64,
+    w: f64,
+    h: f64,
+    grad: &LinearFrameGrad,
+) -> f64 {
+    if w <= 0.0 || h <= 0.0 {
+        return 0.0;
+    }
+    if let Some(path) = grad.path {
+        let cx = origin_x + w / 2.0;
+        let cy = origin_y + h / 2.0;
+        let dx = (px - cx).abs();
+        let dy = (py - cy).abs();
+        let hx = (w / 2.0).max(1e-9);
+        let hy = (h / 2.0).max(1e-9);
+        return match path {
+            PathShade::Circle => ((dx / hx).powi(2) + (dy / hy).powi(2)).sqrt().clamp(0.0, 1.0),
+            PathShade::Rect | PathShade::Shape => (dx / hx).max(dy / hy).clamp(0.0, 1.0),
+        };
+    }
+    if grad.ang == LINEAR_ANG_HORIZONTAL {
+        return (px - origin_x) / w;
+    }
+    if grad.ang == LINEAR_ANG_VERTICAL {
+        return (py - origin_y) / h;
+    }
+    let turns = (grad.ang.rem_euclid(21_600_000) as f64) / 21_600_000.0;
+    let rad = turns * std::f64::consts::TAU;
+    let (ux, uy) = (rad.cos(), rad.sin());
+    let corners = [
+        (origin_x, origin_y),
+        (origin_x + w, origin_y),
+        (origin_x, origin_y + h),
+        (origin_x + w, origin_y + h),
+    ];
+    let mut min = f64::INFINITY;
+    let mut max = f64::NEG_INFINITY;
+    for (cx, cy) in corners {
+        let d = cx * ux + cy * uy;
+        min = min.min(d);
+        max = max.max(d);
+    }
+    if max <= min {
+        0.0
+    } else {
+        ((px * ux + py * uy - min) / (max - min)).clamp(0.0, 1.0)
+    }
+}
+
+/// Best-effort stop color so a gradient can export when the locked solid
+/// parser rejects a transform or a non-sRGB base. Known solid fills reuse
+/// `resolve_frame_solid`. Remaining hue/sat-style models are ignored rather
+/// than invented; `lastClr`/`val` or black is used as the base.
+pub(super) fn resolve_stop_color(color: &Element, scheme: &ThemeScheme) -> ([u8; 3], u8) {
+    match resolve_frame_solid(color, scheme) {
+        Ok(FrameFill::Solid(rgb)) => (rgb, 255),
+        Ok(FrameFill::Translucent(rgb, units)) => (rgb, ooxml_alpha_to_u8(units)),
+        Ok(FrameFill::AlphaProduct(rgb, product)) => {
+            let a = ((product * 255 + ALPHA_PRODUCT_DENOM / 2) / ALPHA_PRODUCT_DENOM) as u8;
+            (rgb, a)
+        }
+        _ => fallback_stop_color(color, scheme),
+    }
+}
+
+fn fallback_stop_color(color: &Element, scheme: &ThemeScheme) -> ([u8; 3], u8) {
+    let from_hex = || {
+        color
+            .attr_local("lastClr")
+            .and_then(parse_hex)
+            .or_else(|| color.attr_local("val").and_then(parse_hex))
+    };
+    let mut rgb = match color.local_name() {
+        "srgbClr" => color.attr_local("val").and_then(parse_hex).or_else(from_hex).unwrap_or([0, 0, 0]),
+        "schemeClr" => color
+            .attr_local("val")
+            .and_then(|name| scheme_slot(name, scheme))
+            .or_else(from_hex)
+            .unwrap_or([0, 0, 0]),
+        "sysClr" => color
+            .attr_local("val")
+            .and_then(|name| scheme.sys.get(name))
+            .or_else(from_hex)
+            .unwrap_or([0, 0, 0]),
+        "scrgbClr" => parse_frame_scrgb_color(color).or_else(from_hex).unwrap_or([0, 0, 0]),
+        "prstClr" => parse_frame_preset_color(color).or_else(from_hex).unwrap_or([0, 0, 0]),
+        "hslClr" => parse_frame_hsl_color(color).or_else(from_hex).unwrap_or([0, 0, 0]),
+        _ => from_hex().unwrap_or([0, 0, 0]),
+    };
+    let mut alpha_units: Option<u32> = None;
+    for kid in color.element_children() {
+        match kid.local_name() {
+            "alpha" => {
+                if let Some(v) = parse_ooxml_alpha(kid.attr_local("val")) {
+                    alpha_units = Some(v);
+                }
+            }
+            "lumMod" => {
+                if let Some(v) = parse_ooxml_alpha(kid.attr_local("val")) {
+                    rgb = lum_mod(rgb, f64::from(v) / 100_000.0);
+                }
+            }
+            "lumOff" => {
+                if let Some(raw) = kid.attr_local("val").and_then(|s| s.parse::<i64>().ok()) {
+                    rgb = lum_off(rgb, raw as f64 / 100_000.0);
+                }
+            }
+            "tint" => {
+                if let Some(v) = parse_ooxml_alpha(kid.attr_local("val")) {
+                    rgb = tint_rgb(rgb, f64::from(v) / 100_000.0);
+                }
+            }
+            "shade" => {
+                if let Some(v) = parse_ooxml_alpha(kid.attr_local("val")) {
+                    rgb = scale_rgb(rgb, f64::from(v) / 100_000.0);
+                }
+            }
+            _ => {}
+        }
+    }
+    (rgb, ooxml_alpha_to_u8(alpha_units.unwrap_or(100_000)))
 }
 
 pub(super) fn office_grad_weight(t: f64) -> f64 {

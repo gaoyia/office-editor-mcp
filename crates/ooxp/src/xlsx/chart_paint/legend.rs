@@ -1,6 +1,13 @@
 //! Legend semantics live separately from chart axes. Dimensions follow the export DPI; 96 is the historical default.
 use super::*;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+enum Underline {
+    #[default]
+    None,
+    Single,
+    Double,
+}
 #[derive(Clone, PartialEq)]
 struct TextStyle {
     name: String,
@@ -8,6 +15,11 @@ struct TextStyle {
     bold: bool,
     italic: bool,
     color: [u8; 3],
+    underline: Underline,
+    strike: bool,
+    /// DrawingML `baseline` in 100000ths of the font size. Positive moves
+    /// the run up; negative moves it down. Not an invented scale factor.
+    baseline: i32,
 }
 impl Default for TextStyle {
     fn default() -> Self {
@@ -17,6 +29,9 @@ impl Default for TextStyle {
             bold: false,
             italic: false,
             color: INK,
+            underline: Underline::None,
+            strike: false,
+            baseline: 0,
         }
     }
 }
@@ -31,6 +46,11 @@ struct Manual {
     y: Coordinate,
     w: Option<f64>,
     h: Option<f64>,
+    w_edge: bool,
+    h_edge: bool,
+    /// `layoutTarget=inner` keeps chart-space manual coordinates but does
+    /// not apply the automatic pos reservation to the plot. Not an outer no-op.
+    inner: bool,
 }
 pub(super) struct Spec {
     pub(super) legacy: bool,
@@ -42,6 +62,7 @@ pub(super) struct Spec {
     entries: Vec<(usize, TextStyle)>,
     background: FrameFill,
     border: Option<([u8; 3], f64)>,
+    shadow: Option<OuterShadow>,
 }
 pub(super) fn unsupported() -> Error {
     Error::with_path(ErrorKind::ChartImageUnsupported, "id")
@@ -83,6 +104,32 @@ impl Spec {
             && self.entries.is_empty()
             && self.background == FrameFill::NoFill
             && self.border.is_none()
+            && self.shadow.is_none()
+    }
+
+    /// Official-like automatic pie legend: overlay 0, no manual layout, and
+    /// the same default typography/frame subset as `default_right_ink`.
+    /// Right stays on the existing path; l/t/b/tr are the F39 close-enough
+    /// positions. Not a unique official-matrix lock of every layout.
+    pub(super) fn official_like_pie_auto_legend(&self) -> bool {
+        !self.overlay
+            && self.style == TextStyle::default()
+            && self.manual.is_none()
+            && self.deleted.is_empty()
+            && self.entries.is_empty()
+            && self.background == FrameFill::NoFill
+            && self.border.is_none()
+            && self.shadow.is_none()
+            && matches!(
+                self.pos,
+                Some(
+                    LegendPos::Right
+                        | LegendPos::Left
+                        | LegendPos::Top
+                        | LegendPos::Bottom
+                        | LegendPos::TopRight
+                )
+            )
     }
     // Entry-only paint changes do not change the inherited font metrics.
     // Controlled Excel exports confirm that the existing default-right geometry
@@ -94,6 +141,7 @@ impl Spec {
             && self.deleted.is_empty()
             && self.background == FrameFill::NoFill
             && self.border.is_none()
+            && self.shadow.is_none()
             && self.entries.iter().all(|(_, style)| {
                 let mut metrics = style.clone();
                 metrics.color = self.style.color;
@@ -120,6 +168,7 @@ impl Spec {
             entries: Vec::new(),
             background: FrameFill::NoFill,
             border: None,
+            shadow: None,
         };
         let Some(legend) = chart.child_by_local("legend").filter(|_| pos.is_some()) else {
             return Ok(result);
@@ -145,28 +194,33 @@ impl Spec {
                 })
             })
         {
-            if layout
+            let target = layout
                 .child_by_local("layoutTarget")
-                .and_then(|n| n.attr_local("val"))
-                == Some("inner")
-            {
-                return Err(unsupported());
-            }
-            for mode in ["wMode", "hMode"] {
-                if layout
-                    .child_by_local(mode)
-                    .and_then(|n| n.attr_local("val"))
-                    == Some("edge")
-                {
+                .and_then(|n| n.attr_local("val"));
+            if let Some(val) = target {
+                if val != "inner" && val != "outer" {
                     return Err(unsupported());
                 }
             }
+            let mode_edge = |name: &str| -> Result<bool, Error> {
+                match layout
+                    .child_by_local(name)
+                    .and_then(|n| n.attr_local("val"))
+                {
+                    None | Some("factor") => Ok(false),
+                    Some("edge") => Ok(true),
+                    Some(_) => Err(unsupported()),
+                }
+            };
             let size = |key| number(layout, key).filter(|v| *v > 0.0);
             result.manual = Some(Manual {
                 x: coord(layout, "x", "xMode"),
                 y: coord(layout, "y", "yMode"),
                 w: size("w"),
                 h: size("h"),
+                w_edge: mode_edge("wMode")?,
+                h_edge: mode_edge("hMode")?,
+                inner: target == Some("inner"),
             });
         }
         for entry in legend.children_by_local("legendEntry") {
@@ -204,8 +258,31 @@ impl Spec {
                             legend_solid(child, accents)?
                         };
                     }
+                    "gradFill" if !saw_fill => {
+                        saw_fill = true;
+                        result.background =
+                            read_linear_frame_grad(child, &theme_scheme(None, accents))?;
+                    }
                     "extLst" => (),
-                    "effectLst" | "effectDag" if child.element_children().next().is_none() => (),
+                    "effectDag" if child.element_children().next().is_none() => (),
+                    "effectLst" => {
+                        let mut saw_shadow = false;
+                        for effect in child.element_children() {
+                            if effect.local_name() != "outerShdw" || saw_shadow {
+                                return Err(unsupported());
+                            }
+                            saw_shadow = true;
+                            let shadow = read_outer_shadow_effect(
+                                effect,
+                                &theme_scheme(None, accents),
+                            );
+                            // Zero dist and blur have no visible offset or
+                            // softness; keep the default-right ink path.
+                            if shadow.blur_emu > 0.0 || shadow.dist_emu > 0.0 {
+                                result.shadow = Some(shadow);
+                            }
+                        }
+                    }
                     "ln" if !saw_line => {
                         saw_line = true;
                         if child.child_by_local("noFill").is_some() {
@@ -243,8 +320,9 @@ impl Spec {
         Ok(result)
     }
 }
-// Reuse the already tested sRGB/straight-alpha conversion, but keep the
-// initial legend frame subset explicit. Gradients/effects remain NI.
+// Reuse the already tested sRGB/straight-alpha conversion for legend solid
+// fills. Official-like linear gradFill and outerShdw use the shared frame
+// helpers. Other fills and effects remain NI.
 fn legend_solid(solid: &Element, accents: [[u8; 3]; 6]) -> Result<FrameFill, Error> {
     let colors: Vec<_> = solid.element_children().collect();
     if colors.len() != 1 {
@@ -368,13 +446,26 @@ impl TextStyle {
         }
         self.bold = bool_attr(p.attr_local("b"), self.bold);
         self.italic = bool_attr(p.attr_local("i"), self.italic);
-        if p.attr_local("u").is_some_and(|v| v != "none")
-            || p.attr_local("strike").is_some_and(|v| v != "noStrike")
-            || p.attr_local("baseline")
-                .and_then(|v| v.parse::<i32>().ok())
-                .is_some_and(|v| v != 0)
-        {
-            return Err(unsupported());
+        // Official-like legend decorations: u=sng/dbl, strike=sngStrike, and
+        // the XML baseline percentage. Other underline/strike values stay NI.
+        match p.attr_local("u") {
+            None | Some("none") => {}
+            Some("sng") => self.underline = Underline::Single,
+            Some("dbl") => self.underline = Underline::Double,
+            Some(_) => return Err(unsupported()),
+        }
+        match p.attr_local("strike") {
+            None | Some("noStrike") => {}
+            Some("sngStrike") => self.strike = true,
+            Some(_) => return Err(unsupported()),
+        }
+        if let Some(raw) = p.attr_local("baseline") {
+            let value = raw
+                .parse::<i32>()
+                .ok()
+                .filter(|v| (-100_000..=100_000).contains(v))
+                .ok_or_else(unsupported)?;
+            self.baseline = value;
         }
         let latin = p
             .child_by_local("latin")
@@ -516,6 +607,51 @@ struct Item<'a> {
     space: f64,
     cell: f64,
 }
+fn paint_legend_text_decorations(
+    canvas: &mut Canvas,
+    font: Option<&Font>,
+    item: &Item<'_>,
+    x: f64,
+    top: f64,
+) {
+    if item.style.underline == Underline::None && !item.style.strike {
+        return;
+    }
+    let width = item
+        .face
+        .as_ref()
+        .map(|face| face.typo_width(&item.series.name))
+        .unwrap_or_else(|| text_width(font, None, &item.series.name, item.px));
+    if width <= 0.0 {
+        return;
+    }
+    let ascent = item
+        .face
+        .as_ref()
+        .map(|face| face.line_height())
+        .filter(|v| *v > 0.0)
+        .unwrap_or_else(|| text_height(font, item.px));
+    let descent = item
+        .face
+        .as_ref()
+        .map(|face| face.descent())
+        .filter(|v| *v > 0.0)
+        .unwrap_or(1.0);
+    // Close-enough 1-device-pixel strokes from GDI TEXTMETRIC ascent/descent,
+    // not invented Office EMU or COM offsets. Residuals stay on the review page.
+    if item.style.underline != Underline::None {
+        let y = top + ascent + descent.max(1.0).min(2.0);
+        canvas.stroke_segment(x, y, x + width, y, 1.0, item.style.color);
+        if item.style.underline == Underline::Double {
+            canvas.stroke_segment(x, y + 2.0, x + width, y + 2.0, 1.0, item.style.color);
+        }
+    }
+    if item.style.strike {
+        let y = top + ascent * 0.5;
+        canvas.stroke_segment(x, y, x + width, y, 1.0, item.style.color);
+    }
+}
+
 pub(super) struct Layout<'a> {
     spec: &'a Spec,
     items: Vec<Item<'a>>,
@@ -696,28 +832,48 @@ impl<'a> Layout<'a> {
             h: auto.h,
         };
         if let Some(m) = spec.manual {
-            frame.w = m.w.map(|v| v * w).unwrap_or(auto.w);
-            frame.h = m.h.map(|v| v * h).unwrap_or(auto.h);
-            if frame.w <= 0.0 || frame.h <= 0.0 || frame.w > w || frame.h > h {
-                return Err(unsupported());
-            }
+            // Chart-space coordinates for outer and inner. inner does not
+            // re-originate into the plot rectangle. wMode/hMode=edge are the
+            // right/bottom edge in that same space, applied after left/top.
+            // Degenerate edge sizes (right<=left or bottom<=top) stay
+            // exportable with no painted legend; they are not a factor fallback
+            // and not a guessed minimum box.
+            let factor_w = m.w.map(|v| v * w).unwrap_or(auto.w);
+            let factor_h = m.h.map(|v| v * h).unwrap_or(auto.h);
             frame.x = if m.x.edge {
                 m.x.value * w
             } else {
-                auto.x + auto.w / 2.0 - frame.w / 2.0 + m.x.value * w
+                auto.x + auto.w / 2.0 - factor_w / 2.0 + m.x.value * w
             };
             frame.y = if m.y.edge {
                 m.y.value * h
             } else {
-                auto.y + auto.h / 2.0 - frame.h / 2.0 + m.y.value * h
+                auto.y + auto.h / 2.0 - factor_h / 2.0 + m.y.value * h
             };
+            frame.w = if m.w_edge {
+                m.w.map(|v| v * w - frame.x).unwrap_or(auto.w)
+            } else {
+                factor_w
+            };
+            frame.h = if m.h_edge {
+                m.h.map(|v| v * h - frame.y).unwrap_or(auto.h)
+            } else {
+                factor_h
+            };
+            let degenerate = frame.w <= 0.0 || frame.h <= 0.0;
+            if degenerate {
+                frame.w = 0.0;
+                frame.h = 0.0;
+            } else if !m.w_edge && !m.h_edge && (frame.w > w || frame.h > h) {
+                return Err(unsupported());
+            }
             // Manual frame uses chart-space coordinates, not the COM
             // Legend.Left/Top rectangle (whose public bounds omit 4pt padding).
             // Edge can deliberately clip outside; factor is automatically bounded.
-            if !m.x.edge {
+            if !degenerate && !m.x.edge {
                 frame.x = frame.x.min(w - frame.w);
             }
-            if !m.y.edge {
+            if !degenerate && !m.y.edge {
                 frame.y = frame.y.min(h - frame.h);
             }
         }
@@ -750,14 +906,17 @@ impl<'a> Layout<'a> {
         Ok(result)
     }
     fn flow(&mut self) -> Result<(), Error> {
-        if self.spec.legacy || self.items.is_empty() {
+        if self.spec.legacy || self.items.is_empty() || self.frame.w <= 0.0 || self.frame.h <= 0.0
+        {
             return Ok(());
         }
         let mut row = Vec::new();
         let mut used = 0.0;
         for (idx, item) in self.items.iter().enumerate() {
             if item.width + self.space * 2.0 > self.frame.w {
-                return Err(unsupported());
+                if self.spec.manual.is_none() {
+                    return Err(unsupported());
+                }
             }
             if !row.is_empty()
                 && (!self.horizontal
@@ -776,10 +935,7 @@ impl<'a> Layout<'a> {
             self.rows.push(row);
         }
         let required = self.rows.len() as f64 * self.pitch;
-        if required > self.frame.h {
-            if self.spec.manual.is_some() {
-                return Err(unsupported());
-            }
+        if required > self.frame.h && self.spec.manual.is_none() {
             let delta = required + self.space * 2.0 - self.frame.h;
             self.frame.h += delta;
             self.auto.h = self.frame.h;
@@ -792,7 +948,10 @@ impl<'a> Layout<'a> {
     }
     pub(super) fn reserve(&self) -> [i32; 4] {
         let mut r = [0; 4];
-        if self.spec.overlay || self.items.is_empty() {
+        if self.spec.overlay
+            || self.items.is_empty()
+            || self.spec.manual.as_ref().is_some_and(|m| m.inner)
+        {
             return r;
         }
         match self.spec.pos {
@@ -832,11 +991,15 @@ impl<'a> Layout<'a> {
             (self.frame.x + self.frame.w).round() as i32,
             (self.frame.y + self.frame.h).round() as i32,
         );
+        if let Some(shadow) = &self.spec.shadow {
+            canvas.fill_outer_shadow_rect(x0, y0, x1, y1, shadow);
+        }
         match self.spec.background {
             FrameFill::Solid(rgb) => canvas.fill_rect(x0, y0, x1, y1, rgb),
             FrameFill::Translucent(rgb, alpha) => {
                 canvas.fill_rect_cov(x0, y0, x1, y1, rgb, ooxml_alpha_to_u8(alpha))
             }
+            FrameFill::Linear(ref grad) => canvas.fill_linear_rect(x0, y0, x1, y1, grad),
             _ => (),
         }
         if let Some((rgb, pt)) = self.spec.border {
@@ -887,24 +1050,30 @@ impl<'a> Layout<'a> {
                     if ser.line_visible { super::stroke::Style::new(ser.line_width,ser.line_cap) } else { None },
                     ser.line_dash.as_deref(),
                 )?;
+                let text_x = x
+                    + f64::from(super::legend_key_width(
+                        chart.kind,
+                        self.key.round() as i32,
+                        canvas.dpi,
+                    ))
+                    + if self.horizontal {
+                        item.space
+                    } else {
+                        self.space
+                    };
+                let text_top = y + (self.line - item.line) / 2.0
+                    - (f64::from(item.style.baseline) / 100_000.0) * f64::from(item.px);
                 draw_text(
                     canvas,
                     font,
                     item.face.as_ref(),
                     &ser.name,
-                    x + f64::from(super::legend_key_width(
-                        chart.kind,
-                        self.key.round() as i32,
-                        canvas.dpi,
-                    )) + if self.horizontal {
-                        item.space
-                    } else {
-                        self.space
-                    },
-                    y + (self.line - item.line) / 2.0,
+                    text_x,
+                    text_top,
                     item.px,
                     item.style.color,
                 );
+                paint_legend_text_decorations(canvas, font, item, text_x, text_top);
                 x += item.width + gap;
             }
             y += self.pitch;
@@ -1027,7 +1196,16 @@ mod tests {
         assert!(s.style.bold && s.style.italic);
         assert_eq!(s.style.color, [255, 0, 0]);
         assert_eq!(s.deleted, [0]);
-        assert!(spec("<legend><txPr><p><pPr><defRPr u='sng'/></pPr></p></txPr></legend>").is_err());
+        let underline = spec("<legend><txPr><p><pPr><defRPr u='sng'/></pPr></p></txPr></legend>").unwrap();
+        assert_eq!(underline.style.underline, Underline::Single);
+        let double = spec("<legend><txPr><p><pPr><defRPr u='dbl'/></pPr></p></txPr></legend>").unwrap();
+        assert_eq!(double.style.underline, Underline::Double);
+        let strike = spec("<legend><txPr><p><pPr><defRPr strike='sngStrike'/></pPr></p></txPr></legend>").unwrap();
+        assert!(strike.style.strike);
+        let sub = spec("<legend><txPr><p><pPr><defRPr baseline='-25000'/></pPr></p></txPr></legend>").unwrap();
+        assert_eq!(sub.style.baseline, -25_000);
+        assert!(spec("<legend><txPr><p><pPr><defRPr u='wavy'/></pPr></p></txPr></legend>").is_err());
+        assert!(spec("<legend><txPr><p><pPr><defRPr strike='dblStrike'/></pPr></p></txPr></legend>").is_err());
     }
     #[test]
     fn manual_modes_are_not_the_same_coordinate_system() {
@@ -1042,10 +1220,44 @@ mod tests {
             !m.x.edge && !m.y.edge,
             "missing or malformed coordinates retain automatic positioning"
         );
+        let edge = spec(
+            "<legend><layout><manualLayout><wMode val='edge'/><w val='.4'/></manualLayout></layout></legend>",
+        )
+        .unwrap();
+        let m = edge.manual.unwrap();
+        assert!(m.w_edge && !m.h_edge && !m.inner);
+        assert_eq!(m.w, Some(0.4));
+        let inner = spec(
+            "<legend><layout><manualLayout><layoutTarget val='inner'/><xMode val='edge'/><yMode val='edge'/><x val='.1'/><y val='.2'/><w val='.4'/><h val='.3'/></manualLayout></layout></legend>",
+        )
+        .unwrap();
+        let m = inner.manual.unwrap();
+        assert!(m.inner && m.x.edge && m.y.edge && !m.w_edge && !m.h_edge);
         assert!(spec(
-            "<legend><layout><manualLayout><wMode val='edge'/><w val='.4'/></manualLayout></layout></legend>"
+            "<legend><layout><manualLayout><layoutTarget val='other'/><w val='.4'/></manualLayout></layout></legend>"
         )
         .is_err());
+    }
+
+    #[test]
+    fn official_like_legend_grad_fill_and_outer_shadow_parse() {
+        let grad = spec(
+            "<legend><spPr><gradFill flip='none' rotWithShape='1'><gsLst><gs pos='0'><srgbClr val='FF0000'/></gs><gs pos='100000'><srgbClr val='FFFFFF'/></gs></gsLst><lin ang='5400000' scaled='1'/><tileRect/></gradFill></spPr></legend>",
+        )
+        .unwrap();
+        assert!(matches!(grad.background, FrameFill::Linear(ref g) if g.ang == 5_400_000));
+        assert!(grad.shadow.is_none());
+        let shadow = spec(
+            "<legend><spPr><effectLst><outerShdw blurRad='50800' dist='71842' dir='2700013' rotWithShape='0'><srgbClr val='000000'><alpha val='60000'/></srgbClr></outerShdw></effectLst></spPr></legend>",
+        )
+        .unwrap();
+        let sh = shadow.shadow.unwrap();
+        assert_eq!(sh.color, [0, 0, 0]);
+        assert_eq!(sh.blur_emu, 50_800.0);
+        assert_eq!(sh.dist_emu, 71_842.0);
+        assert_eq!(sh.dir, 2_700_013);
+        assert!(spec("<legend><spPr><effectLst><innerShdw/></effectLst></spPr></legend>").is_err());
+        assert!(spec("<legend><spPr><gradFill/></spPr></legend>").is_err());
     }
 }
 
@@ -1064,6 +1276,7 @@ mod overlay_ink_tests {
             entries: Vec::new(),
             background: FrameFill::NoFill,
             border: None,
+            shadow: None,
         };
         assert!(spec.default_right_ink());
         spec.overlay = true;

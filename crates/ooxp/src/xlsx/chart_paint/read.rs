@@ -18,16 +18,9 @@ pub(super) fn read_frame_with(root: &Element, scheme: &ThemeScheme) -> Result<Fr
         .child_by_local("spPr")
         .and_then(|p| p.child_by_local("ln"))
         .is_none();
-    // Only the rectangular no-line silhouette is locked. Rounded no-line
-    // needs fill clipping independent of the old rounded stroke coverage.
-    if (!border && rounded)
-        || plot
-            .and_then(|p| p.child_by_local("spPr"))
-            .and_then(|p| p.child_by_local("ln"))
-            .is_some()
-    {
-        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
-    }
+    // Visible chart/plot lines, rounded no-line, and outerShdw are parsed
+    // here so Office-exportable frames produce an image. The locked default
+    // 1px gray border (no `a:ln`) and rectangular no-line path are unchanged.
     Ok(FrameStyle {
         rounded,
         border,
@@ -36,6 +29,12 @@ pub(super) fn read_frame_with(root: &Element, scheme: &ThemeScheme) -> Result<Fr
             .map(|node| read_frame_fill(node, scheme))
             .transpose()?
             .unwrap_or(FrameFill::Default),
+        chart_line: read_visible_frame_line(root, scheme)?,
+        plot_line: plot
+            .map(|node| read_visible_frame_line(node, scheme))
+            .transpose()?
+            .flatten(),
+        chart_shadow: read_outer_shadow(root, scheme)?,
     })
 }
 
@@ -63,7 +62,21 @@ pub(super) fn read_frame_fill(node: &Element, scheme: &ThemeScheme) -> Result<Fr
                     return Err(unsupported());
                 }
                 saw_fill = true;
-                fill = read_linear_frame_grad(prop)?;
+                fill = read_linear_frame_grad(prop, scheme)?;
+            }
+            "pattFill" => {
+                if saw_fill {
+                    return Err(unsupported());
+                }
+                saw_fill = true;
+                fill = FrameFill::Pattern(read_pattern_fill(prop, scheme)?);
+            }
+            "blipFill" => {
+                if saw_fill {
+                    return Err(unsupported());
+                }
+                saw_fill = true;
+                fill = FrameFill::Blip(read_blip_fill(prop)?);
             }
             "solidFill" => {
                 if saw_fill {
@@ -77,8 +90,8 @@ pub(super) fn read_frame_fill(node: &Element, scheme: &ThemeScheme) -> Result<Fr
                 }
                 fill = resolve_frame_solid(color, scheme)?;
             }
-            "ln" if !saw_line && is_invisible_frame_line(prop) => saw_line = true,
-            "effectLst" if prop.element_children().next().is_none() => (),
+            "ln" => saw_line = true,
+            "effectLst" => (),
             // Excel 16 writes a:noFill plus an Office 2010 hiddenFill ext that
             // only remembers the previous fill; it is not a visible fill.
             "extLst" if is_office_hidden_fill_ext(prop) => saw_hidden_ext = true,
@@ -136,6 +149,123 @@ pub(super) fn is_invisible_frame_line(line: &Element) -> bool {
     no_fill
 }
 
+/// Close-enough visible `a:ln` on a chart or plot frame. `a:noFill` stays
+/// invisible (the locked rectangular no-line path). Omitted `w` uses 1pt
+/// (12700 EMU). Omitted fill uses opaque black so a bare `<a:ln w="..."/>`
+/// still exports. Unresolved or non-solid fills also fall back to black.
+/// This is not a unique official-matrix lock.
+pub(super) fn read_visible_frame_line(
+    node: &Element,
+    scheme: &ThemeScheme,
+) -> Result<Option<FrameLine>, Error> {
+    let Some(line) = node
+        .child_by_local("spPr")
+        .and_then(|props| props.child_by_local("ln"))
+    else {
+        return Ok(None);
+    };
+    if is_invisible_frame_line(line)
+        || line
+            .element_children()
+            .any(|child| child.local_name() == "noFill")
+    {
+        return Ok(None);
+    }
+    let width_emu = line
+        .attr_local("w")
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|width| width.is_finite() && *width > 0.0)
+        .unwrap_or(12_700.0);
+    let mut color = [0_u8, 0, 0];
+    let mut alpha = 255_u8;
+    for child in line.element_children() {
+        if child.local_name() == "solidFill" {
+            let (rgb, a) = frame_line_color(child, scheme);
+            color = rgb;
+            alpha = a;
+        }
+    }
+    Ok(Some(FrameLine {
+        color,
+        alpha,
+        width_emu,
+    }))
+}
+
+fn frame_line_color(fill: &Element, scheme: &ThemeScheme) -> ([u8; 3], u8) {
+    let Some(color) = fill.element_children().next() else {
+        return ([0, 0, 0], 255);
+    };
+    match resolve_frame_solid(color, scheme) {
+        Ok(FrameFill::Solid(rgb)) => (rgb, 255),
+        Ok(FrameFill::Translucent(rgb, a)) => (rgb, ooxml_alpha_to_u8(a)),
+        Ok(FrameFill::AlphaProduct(rgb, product)) => (rgb, alpha_product_to_u8(product)),
+        _ => ([0, 0, 0], 255),
+    }
+}
+
+fn parse_emu_attr(node: &Element, name: &str) -> f64 {
+    node.attr_local(name)
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .unwrap_or(0.0)
+}
+
+/// Close-enough `a:outerShdw`. Missing color is opaque black; missing
+/// blur/dist/dir are zero. Used by chart-area and legend-frame shadows.
+/// Not a unique official lock.
+pub(super) fn read_outer_shadow_effect(shadow: &Element, scheme: &ThemeScheme) -> OuterShadow {
+    let mut color = [0_u8, 0, 0];
+    let mut alpha = 255_u8;
+    for child in shadow.element_children() {
+        match resolve_frame_solid(child, scheme) {
+            Ok(FrameFill::Solid(rgb)) => {
+                color = rgb;
+                alpha = 255;
+            }
+            Ok(FrameFill::Translucent(rgb, a)) => {
+                color = rgb;
+                alpha = ooxml_alpha_to_u8(a);
+            }
+            Ok(FrameFill::AlphaProduct(rgb, product)) => {
+                color = rgb;
+                alpha = alpha_product_to_u8(product);
+            }
+            _ => {}
+        }
+    }
+    let dir = shadow
+        .attr_local("dir")
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(0);
+    OuterShadow {
+        color,
+        alpha,
+        blur_emu: parse_emu_attr(shadow, "blurRad"),
+        dist_emu: parse_emu_attr(shadow, "dist"),
+        dir,
+    }
+}
+
+/// Close-enough chart-area `a:outerShdw`. Other `effectLst` children are
+/// ignored so the chart still exports. Not a unique official lock.
+pub(super) fn read_outer_shadow(
+    node: &Element,
+    scheme: &ThemeScheme,
+) -> Result<Option<OuterShadow>, Error> {
+    let Some(shadow) = node
+        .child_by_local("spPr")
+        .and_then(|props| props.child_by_local("effectLst"))
+        .and_then(|list| {
+            list.element_children()
+                .find(|child| child.local_name() == "outerShdw")
+        })
+    else {
+        return Ok(None);
+    };
+    Ok(Some(read_outer_shadow_effect(shadow, scheme)))
+}
+
 pub(super) fn is_office_hidden_fill_ext(ext_lst: &Element) -> bool {
     let mut exts = ext_lst.element_children();
     let Some(ext) = exts.next() else {
@@ -175,54 +305,162 @@ pub(super) fn ooxml_alpha_to_u8(alpha: u32) -> u8 {
     ((u64::from(alpha) * 255 + 50_000) / 100_000) as u8
 }
 
-/// Opaque sRGB stop-table linear gradFill at the existing 0/90 geometry. Path fills,
-/// other angles, pattern, blip, and color transforms stay NI.
-pub(super) fn read_linear_frame_grad(grad: &Element) -> Result<FrameFill, Error> {
+/// Pattern, blip, and gradient frame fills. Locked 0/90 opaque sRGB tables
+/// and `ltHorz` / stretch-blip foundations are unchanged. Other Office-exportable
+/// variants use close-enough rules so they produce an image instead of rejecting.
+
+pub(super) fn read_pattern_fill(
+    patt: &Element,
+    scheme: &ThemeScheme,
+) -> Result<pattern::PatternFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
-    let flip = grad.attr_local("flip").unwrap_or("none");
-    if flip != "none" {
+    let prst = pattern::PatternPreset::parse(patt.attr_local("prst").ok_or_else(unsupported)?)
+        .ok_or_else(unsupported)?;
+    let mut fg = None;
+    let mut bg = None;
+    for child in patt.element_children() {
+        match child.local_name() {
+            "fgClr" if fg.is_none() => fg = Some(read_pattern_color(child, scheme)?),
+            "bgClr" if bg.is_none() => bg = Some(read_pattern_color(child, scheme)?),
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok(pattern::PatternFill {
+        prst,
+        fg: fg.ok_or_else(unsupported)?,
+        bg: bg.ok_or_else(unsupported)?,
+    })
+}
+
+fn read_pattern_color(slot: &Element, scheme: &ThemeScheme) -> Result<[u8; 3], Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut colors = slot.element_children();
+    let color = colors.next().ok_or_else(unsupported)?;
+    if colors.next().is_some() {
         return Err(unsupported());
     }
-    match grad.attr_local("rotWithShape") {
-        None | Some("1") => {}
-        _ => return Err(unsupported()),
+    match resolve_frame_solid(color, scheme) {
+        Ok(FrameFill::Solid(rgb)) => Ok(rgb),
+        Ok(FrameFill::Translucent(rgb, _)) | Ok(FrameFill::AlphaProduct(rgb, _)) => Ok(rgb),
+        _ => Ok(resolve_stop_color(color, scheme).0),
     }
+}
+
+/// Picture fills. Stretch with empty/zero srcRect/fillRect and a no-op effect
+/// list keeps the locked foundation. Tile, crop, non-zero fillRect, a non-zero
+/// `dpi`, and remaining blip effects are stored and painted close-enough so
+/// the chart exports when media is present.
+pub(super) fn read_blip_fill(fill: &Element) -> Result<pattern::BlipFill, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut dpi = 0u32;
+    for (name, value) in &fill.attrs {
+        match name.as_str() {
+            "rotWithShape" => {}
+            "dpi" => {
+                dpi = value.parse().unwrap_or(0);
+            }
+            _ => {}
+        }
+    }
+    let mut embed = None;
+    let mut src_rect = None;
+    let mut fill_rect = None;
+    let mut tile = None;
+    let mut saw_stretch = false;
+    for child in fill.element_children() {
+        match child.local_name() {
+            "blip" if embed.is_none() => {
+                let id = child
+                    .attr_local("embed")
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(unsupported)?;
+                embed = Some(id.to_string());
+            }
+            "srcRect" if src_rect.is_none() => {
+                src_rect = Some(read_percent_rect(child));
+            }
+            "stretch" if !saw_stretch && tile.is_none() => {
+                saw_stretch = true;
+                if let Some(rect) = child.element_children().find(|el| el.local_name() == "fillRect")
+                {
+                    fill_rect = Some(read_percent_rect(rect));
+                }
+            }
+            "tile" if tile.is_none() && !saw_stretch => {
+                tile = Some(read_blip_tile(child));
+            }
+            _ => {}
+        }
+    }
+    Ok(pattern::BlipFill {
+        embed: embed.ok_or_else(unsupported)?,
+        src_rect: src_rect.filter(|r| *r != [0, 0, 0, 0]),
+        fill_rect: fill_rect.filter(|r| *r != [0, 0, 0, 0]),
+        tile,
+        dpi,
+    })
+}
+
+fn read_percent_rect(node: &Element) -> [i64; 4] {
+    let one = |name: &str| {
+        node.attr_local(name)
+            .or_else(|| node.attr(name))
+            .and_then(|raw| raw.parse().ok())
+            .unwrap_or(0)
+    };
+    [one("l"), one("t"), one("r"), one("b")]
+}
+
+fn read_blip_tile(node: &Element) -> pattern::BlipTile {
+    let num = |name: &str, default: i64| {
+        node.attr_local(name)
+            .or_else(|| node.attr(name))
+            .and_then(|raw| raw.parse().ok())
+            .unwrap_or(default)
+    };
+    pattern::BlipTile {
+        tx: num("tx", 0),
+        ty: num("ty", 0),
+        sx: num("sx", 100_000),
+        sy: num("sy", 100_000),
+        flip: pattern::BlipFlip::parse(node.attr_local("flip").or_else(|| node.attr("flip"))),
+        algn: pattern::BlipAlign::parse(node.attr_local("algn").or_else(|| node.attr("algn"))),
+    }
+}
+
+pub(super) fn read_linear_frame_grad(
+    grad: &Element,
+    scheme: &ThemeScheme,
+) -> Result<FrameFill, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let mut gs_lst = None;
     let mut lin = None;
-    let mut saw_tile = false;
+    let mut path = None;
     for child in grad.element_children() {
         match child.local_name() {
             "gsLst" if gs_lst.is_none() => gs_lst = Some(child),
             "lin" if lin.is_none() => lin = Some(child),
-            "tileRect" if !saw_tile => {
-                if child.element_children().next().is_some()
-                    || child.attrs.iter().any(|(_, v)| !v.is_empty() && v != "0")
-                {
-                    return Err(unsupported());
-                }
-                saw_tile = true;
+            "path" if path.is_none() => {
+                path = Some(match child.attr_local("path").unwrap_or("rect") {
+                    "circle" => PathShade::Circle,
+                    "shape" => PathShade::Shape,
+                    _ => PathShade::Rect,
+                });
             }
+            "tileRect" => {}
             _ => return Err(unsupported()),
         }
     }
     let gs_lst = gs_lst.ok_or_else(unsupported)?;
-    let lin = lin.ok_or_else(unsupported)?;
-    let scaled = lin.attr_local("scaled").unwrap_or("1");
-    if scaled != "0" && scaled != "1" {
-        return Err(unsupported());
+    let mut ang = LINEAR_ANG_HORIZONTAL;
+    if let Some(lin) = lin {
+        if let Some(raw) = lin.attr_local("ang") {
+            ang = raw.parse().map_err(|_| unsupported())?;
+        }
     }
-    let ang: i64 = lin
-        .attr_local("ang")
-        .ok_or_else(unsupported)?
-        .parse()
-        .map_err(|_| unsupported())?;
-    if ang != LINEAR_ANG_HORIZONTAL && ang != LINEAR_ANG_VERTICAL {
-        return Err(unsupported());
-    }
-    if lin.element_children().next().is_some() {
-        return Err(unsupported());
-    }
-    let mut stops = Vec::new();
+    let mut raw_stops = Vec::new();
+    let mut any_alpha = false;
+    let mut any_non_srgb = false;
     for gs in gs_lst.element_children() {
         if gs.local_name() != "gs" {
             return Err(unsupported());
@@ -234,20 +472,39 @@ pub(super) fn read_linear_frame_grad(grad: &Element) -> Result<FrameFill, Error>
             .map_err(|_| unsupported())?;
         let mut colors = gs.element_children();
         let color = colors.next().ok_or_else(unsupported)?;
-        if colors.next().is_some() || color.local_name() != "srgbClr" {
+        if colors.next().is_some() {
             return Err(unsupported());
         }
-        if color.element_children().next().is_some() {
-            return Err(unsupported());
+        if color.local_name() != "srgbClr" || color.element_children().next().is_some() {
+            any_non_srgb = true;
         }
-        let rgb = color
-            .attr_local("val")
-            .and_then(parse_hex)
-            .ok_or_else(unsupported)?;
-        stops.push((pos, rgb));
+        let (rgb, alpha) = resolve_stop_color(color, scheme);
+        if alpha != 255 {
+            any_alpha = true;
+        }
+        raw_stops.push((pos, rgb, alpha));
     }
-    let stops = gradient::StopTable::new(stops).ok_or_else(unsupported)?;
-    Ok(FrameFill::Linear(LinearFrameGrad { stops, ang }))
+    let use_close = any_alpha
+        || any_non_srgb
+        || raw_stops.len() < 2
+        || raw_stops.first().is_some_and(|s| s.0 != 0)
+        || raw_stops.last().is_some_and(|s| s.0 != 100_000)
+        || {
+            let mut ordered = raw_stops.clone();
+            ordered.sort_by_key(|s| s.0);
+            ordered.windows(2).any(|pair| pair[0].0 == pair[1].0)
+        };
+    let stops = if use_close {
+        gradient::StopTable::close_enough(raw_stops).ok_or_else(unsupported)?
+    } else {
+        gradient::StopTable::new(raw_stops.into_iter().map(|(p, c, _)| (p, c)).collect())
+            .ok_or_else(unsupported)?
+    };
+    Ok(FrameFill::Linear(LinearFrameGrad {
+        stops,
+        ang,
+        path,
+    }))
 }
 
 pub(super) fn read_chart(
@@ -268,13 +525,42 @@ pub(super) fn read_chart(
         return Err(unsupported());
     }
     let wrapper = wrappers[0];
+    let n_val = plot
+        .element_children()
+        .filter(|e| e.local_name() == "valAx")
+        .count();
+    let n_cat = plot
+        .element_children()
+        .filter(|e| e.local_name() == "catAx")
+        .count();
     let locked_secondary = if wrappers.len() == 2 {
-        Some(axis::read_locked_secondary_axes(plot)?)
+        if n_val == 2 && n_cat == 2 {
+            // Official F26-5 bar+line auto-secondary uses a mixed layout
+            // (bar valAx at the bottom, line valAx on the right). Other
+            // two-wrapper secondary encodings keep the F21 pairing.
+            if official_like_bar_line_wrappers(&wrappers) {
+                Some(axis::read_locked_bar_line_mixed_secondary(plot)?)
+            } else {
+                Some(axis::read_locked_secondary_axes(plot)?)
+            }
+        } else if n_val == 1 && n_cat == 1 {
+            official_like_shared_primary_combo(&wrappers)?;
+            None
+        } else {
+            return Err(unsupported());
+        }
     } else {
         None
     };
     let mut area_missing_as_zero = false;
     let mut stacking = Stacking::Clustered;
+    let mut other: Option<OtherSpec> = None;
+    let mut hole_size: Option<f64> = None;
+    let mut scatter_wrapper_smooth = false;
+    let mut drop_lines = false;
+    let mut hi_low_lines = false;
+    let mut up_down_bars = false;
+    let mut up_down_gap: Option<f64> = None;
     let kind = match wrapper.local_name() {
         "barChart" => {
             let dir = wrapper
@@ -296,7 +582,13 @@ pub(super) fn read_chart(
                     .child_by_local("dispBlanksAs")
                     .and_then(|el| el.attr_local("val"))
                     .unwrap_or("gap");
-                if blanks != "gap" {
+                // gap is the bar/column default. Official F13 Chart.Export of
+                // clustered-column dispBlanksAs=zero and official F14
+                // Chart.Export of clustered-column span both exist. The same
+                // general rules apply to clustered bar: true blanks become 0
+                // under zero; #N/A is skipped; span does not synthesize a
+                // mid value (the official column has no mid column).
+                if !matches!(blanks, "gap" | "zero" | "span") {
                     return Err(unsupported());
                 }
                 if flag(wrapper, "varyColors").unwrap_or(false)
@@ -333,11 +625,29 @@ pub(super) fn read_chart(
                 return Err(unsupported());
             }
             for child in wrapper.element_children() {
-                if matches!(
-                    child.local_name(),
-                    "dropLines" | "hiLowLines" | "upDownBars"
-                ) {
-                    return Err(unsupported());
+                match child.local_name() {
+                    "dropLines" if stacking == Stacking::Clustered
+                        && official_like_empty_chart_decor(child) =>
+                    {
+                        drop_lines = true;
+                    }
+                    "hiLowLines" if stacking == Stacking::Clustered
+                        && official_like_empty_chart_decor(child) =>
+                    {
+                        hi_low_lines = true;
+                    }
+                    "upDownBars" if stacking == Stacking::Clustered => {
+                        if let Some(gap) = official_like_up_down_bars(child) {
+                            up_down_bars = true;
+                            up_down_gap = Some(gap);
+                        } else {
+                            return Err(unsupported());
+                        }
+                    }
+                    "dropLines" | "hiLowLines" | "upDownBars" => {
+                        return Err(unsupported());
+                    }
+                    _ => {}
                 }
             }
             let blanks = chart
@@ -376,10 +686,18 @@ pub(super) fn read_chart(
             // Official Excel 16.0 maps scatterStyle=marker (no series line hide,
             // smooth=0) to xlXYScatterLines (74) and draws connecting strokes.
             // Markers-only remains available via an explicit series a:ln/a:noFill.
+            // Official Excel does not write COM ChartType names as
+            // scatterStyle. xlXYScatterLinesNoMarkers is lineMarker +
+            // symbol=none; xlXYScatterSmooth / SmoothNoMarkers are saved
+            // as scatterStyle=smoothMarker plus series c:smooth=1.
+            // Accept official-like smooth/smoothMarker as a close-enough
+            // image (not a unique interpolation lock; F28 stays that).
+            // scatterStyle=none and the unsaved COM name "line" stay NI.
             let connect = match style {
-                "marker" | "lineMarker" => true,
+                "marker" | "lineMarker" | "smooth" | "smoothMarker" => true,
                 _ => return Err(unsupported()),
             };
+            scatter_wrapper_smooth = matches!(style, "smooth" | "smoothMarker");
             PlotKind::Scatter { connect }
         }
         "areaChart" => {
@@ -397,8 +715,12 @@ pub(super) fn read_chart(
                 return Err(unsupported());
             }
             for child in wrapper.element_children() {
-                if matches!(child.local_name(), "dropLines") {
-                    return Err(unsupported());
+                if child.local_name() == "dropLines" {
+                    if stacking == Stacking::Clustered && official_like_empty_chart_decor(child) {
+                        drop_lines = true;
+                    } else {
+                        return Err(unsupported());
+                    }
                 }
             }
             data_labels_hidden(wrapper.child_by_local("dLbls"))?;
@@ -419,6 +741,38 @@ pub(super) fn read_chart(
             PlotKind::StandardArea
         }
         "pieChart" => {
+            // Official F34 Chart.Export paints a standard pieChart with more
+            // than one official-like series as a single pie from the lowest
+            // c:order series. Reject only a missing series here; selection
+            // happens after every series is read.
+            if wrapper
+                .element_children()
+                .filter(|el| el.local_name() == "ser")
+                .count()
+                == 0
+            {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            let blanks = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            // Official pies often write zero (F09 gold). Unknown values stay NI.
+            // zero/span with a blank point are rejected after the category
+            // domain is applied, because pie blank geometry is not locked.
+            if !matches!(blanks, "gap" | "zero" | "span") {
+                return Err(unsupported());
+            }
+            if plot
+                .element_children()
+                .any(|el| matches!(el.local_name(), "valAx" | "catAx" | "dateAx" | "serAx"))
+            {
+                return Err(unsupported());
+            }
+            PlotKind::Pie
+        }
+        "doughnutChart" => {
             if wrapper
                 .element_children()
                 .filter(|el| el.local_name() == "ser")
@@ -432,7 +786,7 @@ pub(super) fn read_chart(
                 .child_by_local("dispBlanksAs")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("gap");
-            if blanks != "gap" {
+            if !matches!(blanks, "gap" | "zero" | "span") {
                 return Err(unsupported());
             }
             if plot
@@ -441,18 +795,292 @@ pub(super) fn read_chart(
             {
                 return Err(unsupported());
             }
+            // Close-enough: holeSize is percent of the outer diameter.
+            // ECMA default is 50; official F25 gold writes 50. Out of 10..=90 stays NI.
+            let hole = number_val(wrapper, "holeSize").unwrap_or(50.0);
+            if !hole.is_finite() || !(10.0..=90.0).contains(&hole) {
+                return Err(unsupported());
+            }
+            hole_size = Some(hole);
             PlotKind::Pie
+        }
+        "ofPieChart" => {
+            let typ = wrapper
+                .child_by_local("ofPieType")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("pie");
+            if typ != "pie" {
+                return Err(unsupported());
+            }
+            if wrapper
+                .element_children()
+                .filter(|el| el.local_name() == "ser")
+                .count()
+                != 1
+            {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            let blanks = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            if !matches!(blanks, "gap" | "zero" | "span") {
+                return Err(unsupported());
+            }
+            if plot
+                .element_children()
+                .any(|el| matches!(el.local_name(), "valAx" | "catAx" | "dateAx" | "serAx"))
+            {
+                return Err(unsupported());
+            }
+            // Official F25 gold omits splitType/splitPos/custSplit (Excel auto =
+            // last three points, keeping at least one on the main pie).
+            // barOfPie and explicit splits stay NI; this is close-enough, not a
+            // unique official-matrix lock.
+            if wrapper.child_by_local("splitType").is_some()
+                || wrapper.child_by_local("splitPos").is_some()
+                || wrapper.child_by_local("custSplit").is_some()
+            {
+                return Err(unsupported());
+            }
+            let gap = number_val(wrapper, "gapWidth").unwrap_or(150.0);
+            let second = number_val(wrapper, "secondPieSize").unwrap_or(75.0);
+            if !gap.is_finite() || gap < 0.0 || !second.is_finite() || second <= 0.0 {
+                return Err(unsupported());
+            }
+            other = Some(OtherSpec {
+                kind: OtherKind::OfPie,
+                of_pie_gap: gap,
+                second_pie_size: second,
+                ser_lines: wrapper.child_by_local("serLines").is_some(),
+                split_last: 3,
+                bubble_scale: 100.0,
+            });
+            PlotKind::Pie
+        }
+        "radarChart" => {
+            let style = wrapper
+                .child_by_local("radarStyle")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            // Official F25 gold is radarStyle=marker (lines + markers).
+            // filled / standard stay NI without gold.
+            if style != "marker" {
+                return Err(unsupported());
+            }
+            if flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            other = Some(OtherSpec {
+                kind: OtherKind::Radar,
+                ..OtherSpec::default()
+            });
+            PlotKind::StandardLine
+        }
+        "bubbleChart" => {
+            if flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            if flag(wrapper, "showNegBubbles").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            if flag(wrapper, "bubble3D").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            let scale = number_val(wrapper, "bubbleScale").unwrap_or(100.0);
+            if !scale.is_finite() || scale <= 0.0 {
+                return Err(unsupported());
+            }
+            other = Some(OtherSpec {
+                kind: OtherKind::Bubble,
+                bubble_scale: scale,
+                ..OtherSpec::default()
+            });
+            PlotKind::Scatter { connect: false }
+        }
+        "stockChart" => {
+            let nser = wrapper
+                .element_children()
+                .filter(|el| el.local_name() == "ser")
+                .count();
+            // Official F25 gold is HLC (exactly 3 series) with hiLowLines and
+            // no upDownBars. OHLC / volume / upDownBars stay NI.
+            if nser != 3 || wrapper.child_by_local("hiLowLines").is_none() {
+                return Err(unsupported());
+            }
+            if wrapper.child_by_local("upDownBars").is_some() {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            other = Some(OtherSpec {
+                kind: OtherKind::Stock,
+                ..OtherSpec::default()
+            });
+            PlotKind::StandardLine
+        }
+        "surfaceChart" => {
+            if flag(wrapper, "wireframe").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            other = Some(OtherSpec {
+                kind: OtherKind::SurfaceTop,
+                ..OtherSpec::default()
+            });
+            PlotKind::StandardArea
+        }
+        "bar3DChart" => {
+            let dir = wrapper
+                .child_by_local("barDir")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("col");
+            let grouping = wrapper
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("clustered");
+            let shape = wrapper
+                .child_by_local("shape")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("box");
+            // Official F24 gold is col/clustered/shape=box. Other 3D bar
+            // directions, grouping, and prism shapes stay NI.
+            if dir != "col" || grouping != "clustered" || shape != "box" {
+                return Err(unsupported());
+            }
+            if flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            PlotKind::ClusteredColumn
+        }
+        "line3DChart" => {
+            let grouping = wrapper
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            if grouping != "standard" || flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            PlotKind::StandardLine
+        }
+        "area3DChart" => {
+            let grouping = wrapper
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            if grouping != "standard" || flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            let blanks_el = chart.child_by_local("dispBlanksAs");
+            let blanks = blanks_el
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            area_missing_as_zero = blanks_el.is_none() || blanks == "zero" || blanks == "span";
+            if blanks != "gap" && !area_missing_as_zero {
+                return Err(unsupported());
+            }
+            PlotKind::StandardArea
+        }
+        "pie3DChart" => {
+            if wrapper
+                .element_children()
+                .filter(|el| el.local_name() == "ser")
+                .count()
+                != 1
+            {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            if plot
+                .element_children()
+                .any(|el| matches!(el.local_name(), "valAx" | "catAx" | "dateAx" | "serAx"))
+            {
+                return Err(unsupported());
+            }
+            PlotKind::Pie
+        }
+        "surface3DChart" => {
+            if flag(wrapper, "wireframe").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            PlotKind::StandardArea
         }
         _ => return Err(unsupported()),
     };
+    // Official F31 gold is a single standard line or area wrapper. Combo
+    // and secondary encodings with drop/hiLow/upDown stay NI (no gold).
+    if wrappers.len() > 1 && (drop_lines || hi_low_lines || up_down_bars) {
+        return Err(unsupported());
+    }
+    let chart3d = match wrapper.local_name() {
+        "bar3DChart" => Some(Chart3DKind::ColumnClustered),
+        "line3DChart" => Some(Chart3DKind::Line),
+        "area3DChart" => Some(Chart3DKind::Area),
+        "pie3DChart" => Some(Chart3DKind::Pie),
+        "surface3DChart" => Some(Chart3DKind::Surface),
+        _ => None,
+    };
+    let view3d = if chart3d.is_some()
+        || matches!(
+            other.as_ref().map(|o| o.kind),
+            Some(OtherKind::SurfaceTop)
+        )
+    {
+        Some(read_view3d(chart))
+    } else {
+        None
+    };
+    if matches!(other.as_ref().map(|o| o.kind), Some(OtherKind::SurfaceTop)) {
+        // Official F25 surfaceChart gold is a top-down contour: rotX=90,
+        // rotY=0, rAngAx=0, perspective=0, wireframe=0. Other views stay NI.
+        let v = view3d.as_ref().ok_or_else(unsupported)?;
+        if (v.rot_x - 90.0).abs() > 1e-6
+            || v.rot_y.abs() > 1e-6
+            || v.right_angle_axes
+            || v.perspective.abs() > 1e-6
+        {
+            return Err(unsupported());
+        }
+    }
+    if chart3d.is_some() && locked_secondary.is_some() {
+        return Err(unsupported());
+    }
     if let Some(sec) = &locked_secondary {
-        if !matches!(kind, PlotKind::ClusteredColumn | PlotKind::StandardLine) {
+        // Official F21 still-NI gold: same-type clustered bar, standard area
+        // (midCat already opened by F16), omitted min/max, and one official
+        // clustered-column + standard-line combo. Close-enough composition
+        // of already-locked pairing and paint paths; not a unique official
+        // matrix lock, and not a general F26 heterogeneous-combo lock.
+        let same_wrapper = wrappers[1].local_name() == wrapper.local_name();
+        let official_col_line_combo =
+            kind == PlotKind::ClusteredColumn && wrappers[1].local_name() == "lineChart";
+        // Official F26-5: clustered bar + standard line on a right valAx.
+        // Close-enough composition, not a general F26 combo lock.
+        let official_bar_line_combo =
+            kind == PlotKind::ClusteredBar && wrappers[1].local_name() == "lineChart";
+        if same_wrapper {
+            if !matches!(
+                kind,
+                PlotKind::ClusteredColumn
+                    | PlotKind::ClusteredBar
+                    | PlotKind::StandardLine
+                    | PlotKind::StandardArea
+            ) {
+                return Err(unsupported());
+            }
+        } else if !official_col_line_combo && !official_bar_line_combo {
             return Err(unsupported());
         }
-        if wrappers[1].local_name() != wrapper.local_name() {
+        if stacking != Stacking::Clustered {
             return Err(unsupported());
         }
-        if kind == PlotKind::ClusteredColumn {
+        if kind == PlotKind::ClusteredColumn && same_wrapper {
             let dir = wrappers[1]
                 .child_by_local("barDir")
                 .and_then(|el| el.attr_local("val"))
@@ -465,7 +1093,20 @@ pub(super) fn read_chart(
                 return Err(unsupported());
             }
         }
-        if kind == PlotKind::StandardLine {
+        if kind == PlotKind::ClusteredBar && same_wrapper {
+            let dir = wrappers[1]
+                .child_by_local("barDir")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("col");
+            let grouping = wrappers[1]
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("clustered");
+            if dir != "bar" || grouping != "clustered" {
+                return Err(unsupported());
+            }
+        }
+        if kind == PlotKind::StandardLine || official_col_line_combo || official_bar_line_combo {
             let grouping = wrappers[1]
                 .child_by_local("grouping")
                 .and_then(|el| el.attr_local("val"))
@@ -477,12 +1118,29 @@ pub(super) fn read_chart(
                 return Err(unsupported());
             }
         }
-        let gap1 = number_val(wrappers[1], "gapWidth").unwrap_or(150.0);
-        let over1 = number_val(wrappers[1], "overlap").unwrap_or(0.0);
-        if (gap1 - number_val(wrapper, "gapWidth").unwrap_or(150.0)).abs() > 1e-9
-            || (over1 - number_val(wrapper, "overlap").unwrap_or(0.0)).abs() > 1e-9
-        {
-            return Err(unsupported());
+        if kind == PlotKind::StandardArea {
+            let grouping = wrappers[1]
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            if grouping != "standard" || flag(wrappers[1], "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            for child in wrappers[1].element_children() {
+                if matches!(child.local_name(), "dropLines") {
+                    return Err(unsupported());
+                }
+            }
+            data_labels_hidden(wrappers[1].child_by_local("dLbls"))?;
+        }
+        if same_wrapper {
+            let gap1 = number_val(wrappers[1], "gapWidth").unwrap_or(150.0);
+            let over1 = number_val(wrappers[1], "overlap").unwrap_or(0.0);
+            if (gap1 - number_val(wrapper, "gapWidth").unwrap_or(150.0)).abs() > 1e-9
+                || (over1 - number_val(wrapper, "overlap").unwrap_or(0.0)).abs() > 1e-9
+            {
+                return Err(unsupported());
+            }
         }
         for wrap in &wrappers {
             let nser = wrap
@@ -510,7 +1168,10 @@ pub(super) fn read_chart(
     } else {
         flag(wrapper, "varyColors").unwrap_or(false)
     };
-    let gap_width = number_val(wrapper, "gapWidth").unwrap_or(150.0);
+    let mut gap_width = number_val(wrapper, "gapWidth").unwrap_or(150.0);
+    if let Some(gap) = up_down_gap {
+        gap_width = gap;
+    }
     let overlap = number_val(wrapper, "overlap").unwrap_or(0.0);
     // Official Excel 16 stacked / percentStacked barChart writes overlap=100.
     // lineChart / areaChart have no overlap element.
@@ -523,12 +1184,28 @@ pub(super) fn read_chart(
         }
     }
     let mut series = Vec::new();
-    let ser_wrappers: Vec<&Element> = if locked_secondary.is_some() {
+    let ser_wrappers: Vec<&Element> = if locked_secondary.is_some() || wrappers.len() == 2 {
         wrappers.clone()
     } else {
         vec![wrapper]
     };
     for wrap in &ser_wrappers {
+    let kind = match wrap.local_name() {
+        "barChart" => {
+            let dir = wrap
+                .child_by_local("barDir")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("bar");
+            match dir {
+                "col" => PlotKind::ClusteredColumn,
+                "bar" => PlotKind::ClusteredBar,
+                _ => return Err(unsupported()),
+            }
+        }
+        "lineChart" => PlotKind::StandardLine,
+        "areaChart" => PlotKind::StandardArea,
+        _ => kind,
+    };
     let on_secondary = locked_secondary.as_ref().is_some_and(|sec| {
         wrap
             .element_children()
@@ -543,7 +1220,13 @@ pub(super) fn read_chart(
         let order = number_val(ser, "order").unwrap_or(series.len() as f64) as usize;
         let (values, x_values) = if matches!(kind, PlotKind::Scatter { .. }) {
             let ys = series_numbers(ser.child_by_local("yVal"), sheet, cells);
-            let xs = series_numbers(ser.child_by_local("xVal"), sheet, cells);
+            let mut xs = series_numbers(ser.child_by_local("xVal"), sheet, cells);
+            // Official F25 bubble xVal is a strRef of numeric strings (plus a
+            // non-numeric header). Parse those as numbers; skip non-numeric
+            // cells. Close-enough, not a unique official-matrix lock.
+            if !xs.iter().any(|v| v.is_some_and(|n| n.is_finite())) {
+                xs = cache_numeric_strings(ser.child_by_local("xVal"));
+            }
             if xs.is_empty() && ys.is_empty() {
                 continue;
             }
@@ -576,10 +1259,6 @@ pub(super) fn read_chart(
         if on_secondary && value_label.is_some() {
             return Err(unsupported());
         }
-        if value_label == Some(ValueLabel::InsideEnd) && values.iter().flatten().any(|v| *v == 0.0)
-        {
-            return Err(unsupported());
-        }
         if value_label.is_some()
             && values
                 .iter()
@@ -588,7 +1267,10 @@ pub(super) fn read_chart(
         {
             return Err(unsupported());
         }
-        let (error_points, unavailable_points) = if kind == PlotKind::StandardLine {
+        let (error_points, unavailable_points) = if matches!(
+            kind,
+            PlotKind::StandardLine | PlotKind::ClusteredColumn | PlotKind::ClusteredBar
+        ) {
             series_error_points(ser.child_by_local("val"), sheet, cells, values.len())
         } else {
             (Vec::new(), Vec::new())
@@ -616,8 +1298,10 @@ pub(super) fn read_chart(
         }
         // Like the bubble-only flag, NA-as-blank is inert without NA points.
         // Do not reject a fully numeric ordinary line for an inactive option.
-        if kind == PlotKind::StandardLine
-            && unavailable_points.iter().any(|na| *na)
+        if matches!(
+            kind,
+            PlotKind::StandardLine | PlotKind::ClusteredColumn | PlotKind::ClusteredBar
+        ) && unavailable_points.iter().any(|na| *na)
             && find_deep(root, "dispNaAsBlank")
                 .is_some_and(|e| !matches!(e.attr_local("val"), Some("0" | "false" | "off")))
         {
@@ -631,8 +1315,21 @@ pub(super) fn read_chart(
         {
             return Err(unsupported());
         }
+        if matches!(other.as_ref().map(|o| o.kind), Some(OtherKind::Bubble)) {
+            if flag(ser, "bubble3D").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            for point in ser.element_children().filter(|el| el.local_name() == "dPt") {
+                if flag(point, "bubble3D").unwrap_or(false) {
+                    return Err(unsupported());
+                }
+            }
+        }
         let name = series_name(ser, sheet, cells).unwrap_or_else(|| format!("系列{}", order + 1));
         let mut line_color = None;
+        let mut fill_alpha = 255u8;
+        let mut area_no_fill = false;
+        let mut area_pattern = None;
         let style = match kind {
             PlotKind::ClusteredColumn | PlotKind::ClusteredBar => LineSeriesStyle {
         join: stroke::Join::Round,
@@ -643,11 +1340,37 @@ pub(super) fn read_chart(
                 width: 0.0,
                 marker: MarkerKind::None,
                 marker_color: None,
+                smooth: false,
             },
-            PlotKind::StandardLine => read_line_series(ser, accents, dpi, order, true)?,
+            PlotKind::StandardLine => {
+                let style = read_line_series(ser, accents, dpi, order, true)?;
+                // Official F28 gold is a single standard lineChart
+                // (wrapper smooth=0) with per-series c:smooth. Combo,
+                // radar, stacked, 3D, and dashed pens stay NI.
+                if style.smooth
+                    && (stacking != Stacking::Clustered
+                        || wrappers.len() > 1
+                        || chart3d.is_some()
+                        || matches!(
+                            other.as_ref().map(|o| o.kind),
+                            Some(OtherKind::Radar)
+                        )
+                        || style.dash.is_some())
+                {
+                    return Err(unsupported());
+                }
+                style
+            }
             PlotKind::StandardArea => {
-                let area = read_area_series(ser, accents, dpi)?;
+                let allow_complex_fills = stacking == Stacking::Clustered
+                    && wrappers.len() == 1
+                    && chart3d.is_none()
+                    && !on_secondary;
+                let area = read_area_series(ser, accents, dpi, allow_complex_fills)?;
                 line_color = area.line_color;
+                fill_alpha = area.fill_alpha;
+                area_no_fill = area.no_fill;
+                area_pattern = area.pattern;
                 LineSeriesStyle {
         join: stroke::Join::Round,
         dash: None,
@@ -657,15 +1380,24 @@ pub(super) fn read_chart(
                     width: area.line_width,
                     marker: MarkerKind::None,
                     marker_color: None,
+                    smooth: false,
                 }
             }
-            PlotKind::Pie => read_pie_series_style(ser, accents, dpi)?,
+            PlotKind::Pie => read_pie_series_style(
+                ser,
+                accents,
+                dpi,
+                wrapper.local_name() == "pieChart" && chart3d.is_none(),
+            )?,
             PlotKind::Scatter { connect } => {
                 let mut style = read_line_series(ser, accents, dpi, order, false)?;
                 if style.cap != stroke::Cap::Round || style.dash.is_some() { return Err(unsupported()); }
                 if !connect {
                     style.visible = false;
                 }
+                // Explicit series c:smooth wins. When the flag is omitted,
+                // official-like scatterStyle=smooth/smoothMarker still curves.
+                style.smooth = flag(ser, "smooth").unwrap_or(scatter_wrapper_smooth);
                 style
             }
         };
@@ -699,6 +1431,27 @@ pub(super) fn read_chart(
             None
         };
         let values_len = values.len();
+        let (point_markers, trendline, err_bars) = if matches!(
+            kind,
+            PlotKind::StandardLine | PlotKind::StandardArea | PlotKind::Scatter { .. }
+        ) {
+            let decorations_ok = stacking == Stacking::Clustered
+                && wrappers.len() == 1
+                && chart3d.is_none()
+                && !on_secondary;
+            if decorations_ok {
+                read_official_like_series_decor(ser, accents, dpi, values_len, kind)?
+            } else {
+                for name in ["dPt", "trendline", "errBars"] {
+                    if ser.child_by_local(name).is_some() {
+                        return Err(unsupported());
+                    }
+                }
+                (vec![None; values_len], None, None)
+            }
+        } else {
+            (Vec::new(), None, None)
+        };
         series[order] = Series {
             name,
             values,
@@ -721,7 +1474,15 @@ pub(super) fn read_chart(
                 kind,
                 PlotKind::ClusteredColumn | PlotKind::ClusteredBar | PlotKind::StandardLine
             ) {
-                read_deleted_label_points(ser.child_by_local("dLbls"), values_len)?
+                let visibility =
+                    read_deleted_label_points(ser.child_by_local("dLbls"), values_len)?;
+                if value_label.is_none() && !visibility.shown.is_empty() {
+                    // Point showVal=1 cannot silently omit labels when the
+                    // series itself is hidden; that combination stays NI
+                    // until per-point show is painted.
+                    return Err(unsupported());
+                }
+                visibility.deleted
             } else {
                 Vec::new()
             },
@@ -733,8 +1494,37 @@ pub(super) fn read_chart(
                     .and_then(|el| el.attr_local("val"))
                     == Some("span"),
             on_secondary,
+            plot_kind: kind,
+            bubble_sizes: if matches!(other.as_ref().map(|o| o.kind), Some(OtherKind::Bubble)) {
+                series_numbers(ser.child_by_local("bubbleSize"), sheet, cells)
+            } else {
+                Vec::new()
+            },
+            smooth: style.smooth,
+            point_markers,
+            trendline,
+            err_bars,
+            fill_alpha,
+            area_no_fill,
+            area_pattern,
         };
     }
+    }
+    // Official Excel 16 Chart.Export of a standard pieChart with more than
+    // one official-like series paints a single pie from the series with the
+    // lowest c:order (then the lowest c:idx). F34 gold slice proportions
+    // match that series (10/20/30/40), not a later series, and the layout is
+    // the existing single-pie layout. This is a selection RULE from that
+    // matrix, not an invented first-or-last layout.
+    if kind == PlotKind::Pie {
+        let (_painted_el, painted_order) =
+            pie_painted_series(wrapper).ok_or_else(unsupported)?;
+        if painted_order >= series.len() {
+            return Err(unsupported());
+        }
+        let painted = std::mem::take(&mut series[painted_order]);
+        series.clear();
+        series.push(painted);
     }
     // Official all-empty pies keep category cache points but omit every val
     // pt. Do not drop that series before the category domain is applied.
@@ -746,7 +1536,12 @@ pub(super) fn read_chart(
     }
     let mut n = series
         .iter()
-        .map(|ser| ser.values.len().max(ser.x_values.len()))
+        .map(|ser| {
+            ser.values
+                .len()
+                .max(ser.x_values.len())
+                .max(ser.bubble_sizes.len())
+        })
         .max()
         .unwrap_or(0);
     if n == 0 && kind != PlotKind::Pie {
@@ -755,10 +1550,10 @@ pub(super) fn read_chart(
     let mut categories = if matches!(kind, PlotKind::Scatter { .. }) {
         Vec::new()
     } else {
-        cache_labels(series_cat(wrapper))
+        cache_labels(pie_or_first_series_cat(wrapper, kind))
     };
     if categories.is_empty() && !matches!(kind, PlotKind::Scatter { .. }) {
-        if let Some(text) = formula_text(series_cat(wrapper)) {
+        if let Some(text) = formula_text(pie_or_first_series_cat(wrapper, kind)) {
             if let Some(labels) = labels_from_cells(&text, sheet, cells) {
                 categories = labels;
             }
@@ -776,6 +1571,44 @@ pub(super) fn read_chart(
             categories.extend((start..n).map(|i| (i + 1).to_string()));
         }
         categories.truncate(n);
+    }
+    // Close-enough stock dateAx labels: format numeric Excel serials
+    // (1900 system) as yyyy-mm-dd. Not a unique official date-axis lock.
+    if matches!(other.as_ref().map(|o| o.kind), Some(OtherKind::Stock)) {
+        categories = categories
+            .into_iter()
+            .map(|s| {
+                s.parse::<f64>()
+                    .ok()
+                    .filter(|n| n.is_finite() && *n >= 1.0)
+                    .map(format_excel_date)
+                    .unwrap_or(s)
+            })
+            .collect();
+    }
+    if let Some(spec) = other.as_mut() {
+        if spec.kind == OtherKind::OfPie {
+            let n_pts = series
+                .first()
+                .map(|ser| {
+                    ser.values
+                        .iter()
+                        .filter(|v| v.is_some_and(|n| n.is_finite() && n.abs() > 0.0))
+                        .count()
+                })
+                .unwrap_or(0);
+            spec.split_last = 3.min(n_pts.saturating_sub(1));
+        }
+        if spec.kind == OtherKind::Bubble {
+            let any_size = series.iter().any(|ser| {
+                ser.bubble_sizes
+                    .iter()
+                    .any(|v| v.is_some_and(|n| n.is_finite() && n > 0.0))
+            });
+            if !any_size {
+                return Err(unsupported());
+            }
+        }
     }
     if kind == PlotKind::StandardLine || series.iter().any(|s| s.value_label.is_some()) {
         // Do not silently shrink the category domain when both caches omit
@@ -804,8 +1637,9 @@ pub(super) fn read_chart(
     }
     for ser in &mut series {
         ser.values.resize(n, None);
-        // Column blank/error label text has not yet been locked by a public
-        // probe. Never report successful showVal while silently omitting it.
+        // Column/bar blank or error label text has not been locked by a
+        // public official probe. Reject before zero-fill so a labeled true
+        // blank with dispBlanksAs=zero cannot silently drop the label.
         if matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
             && ser.value_label.is_some()
             && ser.values.iter().any(Option::is_none)
@@ -840,8 +1674,61 @@ pub(super) fn read_chart(
                 }
             }
         }
+        // Official F13 Chart.Export of clustered-column dispBlanksAs=zero
+        // exists. True blanks / omitted cache points become 0 (the same
+        // general rule as StandardLine). A 0-height mark is not painted, so
+        // an unlabeled negative-only official fixture can look like the gap
+        // control except for the title. #N/A is not a blank: skip it and do
+        // not fill it as 0. Other errors (#DIV/0!) stay NI under zero.
+        // Official F14 Chart.Export of clustered-column span exists and has
+        // no mid column; span does not synthesize a value, so blanks stay
+        // None (not filled as 0) and are skipped like gap. That is a
+        // documented general rule, not a unique “span equals gap” lock.
+        if matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar) {
+            ser.error_points.resize(n, false);
+            ser.unavailable_points.resize(n, false);
+            if chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                == Some("zero")
+            {
+                if ser
+                    .error_points
+                    .iter()
+                    .zip(&ser.unavailable_points)
+                    .any(|(error, na)| *error && !na)
+                {
+                    return Err(unsupported());
+                }
+                for (value, error) in ser.values.iter_mut().zip(&ser.error_points) {
+                    if value.is_none() && !error {
+                        *value = Some(0.0);
+                    }
+                }
+            }
+        }
         if matches!(kind, PlotKind::Scatter { .. }) {
             ser.x_values.resize(n, None);
+            if matches!(other.as_ref().map(|o| o.kind), Some(OtherKind::Bubble)) {
+                ser.bubble_sizes.resize(n, None);
+            }
+        }
+        if kind == PlotKind::Pie {
+            let mode = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            // A complete numeric cache makes zero/span inert. Leave residual
+            // NI when a blank or non-finite point exists, until official pie
+            // blank/zero/span geometry is uniquely locked.
+            if mode != "gap"
+                && ser
+                    .values
+                    .iter()
+                    .any(|v| v.is_none() || v.is_some_and(|n| !n.is_finite()))
+            {
+                return Err(unsupported());
+            }
         }
     }
     let grid = plot.element_children().any(|el| {
@@ -857,11 +1744,13 @@ pub(super) fn read_chart(
                 .unwrap_or("between")
                 == "between"
         });
-    // Official Excel 16 areaChart stacked / percentStacked writes valAx
-    // crossBetween=midCat (first/last categories on the plot edges). Standard
-    // area and all line charts stay on the existing between path.
+    // Official Excel 16 areaChart writes valAx crossBetween=midCat
+    // (first/last categories on the plot edges), including the default
+    // standard-area encoding. Line charts stay on the existing between path.
+    // Stacked / percentStacked area still require midCat (between stays NI).
+    // midCat composes with already-allowed catAx crosses=min/max and
+    // crossesAt (official F17-8 / F16-8); that is reuse, not a new lock.
     let area_midcat = matches!(kind, PlotKind::StandardArea)
-        && stacking != Stacking::Clustered
         && plot.element_children().filter(|el| el.local_name() == "valAx").all(|el| {
             el.child_by_local("crossBetween")
                 .and_then(|c| c.attr_local("val"))
@@ -890,14 +1779,14 @@ pub(super) fn read_chart(
     };
     let (point_colors, pie_explosion, point_explosions, series_fill, point_fills) =
         if kind == PlotKind::Pie {
-            if series.len() != 1 {
-                return Err(unsupported());
-            }
-            let ser = wrapper
-                .element_children()
-                .find(|el| el.local_name() == "ser")
-                .ok_or_else(unsupported)?;
-            read_pie_point_colors(ser, accents, n, dpi)?
+            let (ser, _) = pie_painted_series(wrapper).ok_or_else(unsupported)?;
+            read_pie_point_colors(
+                ser,
+                accents,
+                n,
+                dpi,
+                wrapper.local_name() == "pieChart" && chart3d.is_none(),
+            )?
         } else {
             (Vec::new(), 0.0, Vec::new(), None, Vec::new())
         };
@@ -906,8 +1795,14 @@ pub(super) fn read_chart(
         // even when every value is negative. All-zero and all-empty pies keep
         // the frame and legend but take no slice. The previous "at least one
         // finite positive" gate is therefore not required.
-        if legend_pos(chart).is_some() && !legend::Spec::read(root, accents)?.default_right_ink() {
-            return Err(unsupported());
+        if legend_pos(chart).is_some() {
+            let spec = legend::Spec::read(root, accents)?;
+            let standard_pie = wrapper.local_name() == "pieChart" && chart3d.is_none();
+            if !(spec.default_right_ink()
+                || (standard_pie && spec.official_like_pie_auto_legend()))
+            {
+                return Err(unsupported());
+            }
         }
     }
     let (axis, axis_x, grid_x, cats_from_bottom) = if matches!(kind, PlotKind::Pie) {
@@ -926,7 +1821,9 @@ pub(super) fn read_chart(
         });
         (y, Some(x), grid_x, true)
     } else if kind == PlotKind::ClusteredBar {
-        let (spec, from_bottom) = if stacking == Stacking::PercentStacked {
+        let (spec, from_bottom) = if let Some(sec) = locked_secondary.as_ref() {
+            (sec.primary, sec.cats_from_bottom)
+        } else if stacking == Stacking::PercentStacked {
             axis::bar_axes_percent_stacked(plot)?
         } else {
             axis::bar_axes(plot)?
@@ -978,11 +1875,26 @@ pub(super) fn read_chart(
         return Err(unsupported());
     }
     if stacking != Stacking::Clustered {
-        // Official F22 evidence is linear autoZero minMax, explicit min/max,
-        // no value labels, no inversion, no log / maxMin / delete / custom crosses.
-        if axis.min.is_none()
-            || axis.max.is_none()
-            || axis.log_base.is_some()
+        // Official F22 evidence is linear autoZero minMax, no value labels,
+        // no inversion, no log / maxMin / delete / custom crosses. Official
+        // F22-6 / F23-7 omit min/max/major on stacked charts; that reuses
+        // scale_values on stacked or algebraic-cumulative extents
+        // (close-enough, not a unique official auto-scale lock).
+        // percentStacked auto stays NI (no official gold).
+        if axis.min.is_none() || axis.max.is_none() {
+            if stacking != Stacking::Stacked
+                || !matches!(
+                    kind,
+                    PlotKind::ClusteredColumn
+                        | PlotKind::ClusteredBar
+                        | PlotKind::StandardLine
+                        | PlotKind::StandardArea
+                )
+            {
+                return Err(unsupported());
+            }
+        }
+        if axis.log_base.is_some()
             || axis.reversed
             || axis.deleted
             || axis.crosses_at.is_some()
@@ -1040,6 +1952,9 @@ pub(super) fn read_chart(
             return Err(unsupported());
         }
     }
+    if chart3d.is_some() && series.iter().any(|ser| ser.value_label.is_some()) {
+        return Err(unsupported());
+    }
     Ok(ColumnChart {
         categories,
         series,
@@ -1054,6 +1969,9 @@ pub(super) fn read_chart(
         axis,
         axis_x,
         axis_secondary,
+        secondary_line_on_right: locked_secondary
+            .as_ref()
+            .is_some_and(|sec| sec.line_on_right),
         cats_from_bottom,
         title: title_text(chart),
         title_typo: title_typography(chart)?,
@@ -1066,13 +1984,80 @@ pub(super) fn read_chart(
         pie_explosion,
         point_explosions,
         area_missing_as_zero,
+        area_midcat,
+        view3d,
+        chart3d,
+        hole_size,
+        other,
+        drop_lines,
+        hi_low_lines,
+        up_down_bars,
     })
+}
+
+fn read_view3d(chart: &Element) -> View3D {
+    // ECMA-376 schema defaults, used only as close-enough fallbacks when
+    // a child is omitted. Not unique official render locks.
+    let mut view = View3D::default();
+    let Some(node) = chart.child_by_local("view3D") else {
+        return view;
+    };
+    if let Some(v) = number_val(node, "rotX") {
+        view.rot_x = v;
+    }
+    if let Some(v) = number_val(node, "rotY") {
+        view.rot_y = v;
+    }
+    if let Some(v) = number_val(node, "perspective") {
+        view.perspective = v;
+    }
+    if let Some(v) = number_val(node, "depthPercent") {
+        view.depth_percent = v;
+    }
+    if let Some(v) = number_val(node, "hPercent") {
+        view.h_percent = v;
+    }
+    if let Some(el) = node.child_by_local("rAngAx") {
+        let flag = el
+            .attr_local("val")
+            .map(|v| !matches!(v, "0" | "false" | "off"))
+            .unwrap_or(true);
+        view.right_angle_axes = flag;
+    }
+    view
 }
 
 pub(super) fn series_cat(bar: &Element) -> Option<&Element> {
     bar.element_children()
         .find(|el| el.local_name() == "ser")
         .and_then(|ser| ser.child_by_local("cat"))
+}
+
+fn pie_or_first_series_cat<'a>(wrapper: &'a Element, kind: PlotKind) -> Option<&'a Element> {
+    if kind == PlotKind::Pie {
+        pie_painted_series(wrapper).and_then(|(ser, _)| ser.child_by_local("cat"))
+    } else {
+        series_cat(wrapper)
+    }
+}
+
+/// Official-like multi-series pie: the painted series is the one with the
+/// lowest c:order, then the lowest c:idx, then document order. The returned
+/// usize is the c:order slot used when series were stored.
+fn pie_painted_series(wrapper: &Element) -> Option<(&Element, usize)> {
+    wrapper
+        .element_children()
+        .filter(|el| el.local_name() == "ser")
+        .enumerate()
+        .min_by_key(|(fallback, ser)| {
+            let order = number_val(ser, "order").map(|v| v as usize).unwrap_or(*fallback);
+            let idx = number_val(ser, "idx").map(|v| v as usize).unwrap_or(*fallback);
+            (order, idx)
+        })
+        .map(|(fallback, ser)| {
+            let order = number_val(ser, "order").map(|v| v as usize).unwrap_or(fallback);
+            (ser, order)
+        })
 }
 
 pub(super) fn is_chart_wrapper(name: &str) -> bool {
@@ -1095,6 +2080,558 @@ pub(super) fn is_chart_wrapper(name: &str) -> bool {
             | "surfaceChart"
             | "surface3DChart"
     )
+}
+
+fn wrapper_ax_ids(wrap: &Element) -> Vec<&str> {
+    wrap.element_children()
+        .filter(|el| el.local_name() == "axId")
+        .filter_map(|el| el.attr_local("val"))
+        .collect()
+}
+
+fn wrapper_ser_count(wrap: &Element) -> usize {
+    wrap.element_children()
+        .filter(|el| el.local_name() == "ser")
+        .count()
+}
+
+fn clustered_col_wrapper(wrap: &Element) -> bool {
+    if wrap.local_name() != "barChart" {
+        return false;
+    }
+    let dir = wrap
+        .child_by_local("barDir")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("bar");
+    let grouping = wrap
+        .child_by_local("grouping")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("clustered");
+    dir == "col"
+        && grouping == "clustered"
+        && !flag(wrap, "varyColors").unwrap_or(false)
+        && (number_val(wrap, "gapWidth").unwrap_or(150.0) - 150.0).abs() <= 1e-9
+        && number_val(wrap, "overlap").unwrap_or(0.0).abs() <= 1e-9
+}
+
+fn clustered_bar_wrapper(wrap: &Element) -> bool {
+    if wrap.local_name() != "barChart" {
+        return false;
+    }
+    let dir = wrap
+        .child_by_local("barDir")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("bar");
+    let grouping = wrap
+        .child_by_local("grouping")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("clustered");
+    dir == "bar"
+        && grouping == "clustered"
+        && !flag(wrap, "varyColors").unwrap_or(false)
+        && (number_val(wrap, "gapWidth").unwrap_or(150.0) - 150.0).abs() <= 1e-9
+        && number_val(wrap, "overlap").unwrap_or(0.0).abs() <= 1e-9
+}
+
+/// Official F31 empty decoration: no children and no non-xmlns attributes.
+fn official_like_empty_chart_decor(el: &Element) -> bool {
+    el.element_children().next().is_none()
+        && el
+            .attrs
+            .iter()
+            .all(|(k, _)| k == "xmlns" || k.starts_with("xmlns:"))
+}
+
+/// Official-like c:upDownBars: gapWidth (default 150) plus empty upBars and
+/// downBars. Styled spPr, missing bars, or unknown children stay NI.
+fn official_like_up_down_bars(el: &Element) -> Option<f64> {
+    if !el
+        .attrs
+        .iter()
+        .all(|(k, _)| k == "xmlns" || k.starts_with("xmlns:"))
+    {
+        return None;
+    }
+    let mut gap = 150.0;
+    let mut saw_up = false;
+    let mut saw_down = false;
+    for child in el.element_children() {
+        match child.local_name() {
+            "gapWidth" => {
+                if !official_like_empty_chart_decor(child) && child.element_children().next().is_some()
+                {
+                    return None;
+                }
+                let Some(raw) = child.attr_local("val") else {
+                    return None;
+                };
+                let Ok(v) = raw.parse::<f64>() else {
+                    return None;
+                };
+                if !v.is_finite() || v < 0.0 {
+                    return None;
+                }
+                // gapWidth may only carry val (plus xmlns).
+                if child
+                    .attrs
+                    .iter()
+                    .any(|(k, _)| k != "val" && k.rsplit(':').next() != Some("val") && k != "xmlns" && !k.starts_with("xmlns:"))
+                {
+                    return None;
+                }
+                if child.element_children().next().is_some() {
+                    return None;
+                }
+                gap = v;
+            }
+            "upBars" if official_like_empty_chart_decor(child) && !saw_up => {
+                saw_up = true;
+            }
+            "downBars" if official_like_empty_chart_decor(child) && !saw_down => {
+                saw_down = true;
+            }
+            _ => return None,
+        }
+    }
+    if saw_up && saw_down {
+        Some(gap)
+    } else {
+        None
+    }
+}
+
+/// Official-like inert metadata: an extLst that only carries uniqueId
+/// values. Other extensions stay NI.
+fn official_like_inert_unique_id_ext_lst(el: &Element) -> bool {
+    if el.local_name() != "extLst" {
+        return false;
+    }
+    if !el
+        .attrs
+        .iter()
+        .all(|(k, _)| k == "xmlns" || k.starts_with("xmlns:"))
+    {
+        return false;
+    }
+    let mut saw = false;
+    for ext in el.element_children() {
+        if ext.local_name() != "ext" {
+            return false;
+        }
+        let mut id_count = 0;
+        for child in ext.element_children() {
+            if child.local_name() == "uniqueId" {
+                if child.element_children().next().is_some() {
+                    return false;
+                }
+                id_count += 1;
+            } else {
+                return false;
+            }
+        }
+        if id_count != 1 {
+            return false;
+        }
+        saw = true;
+    }
+    saw
+}
+
+fn official_like_flag_off(el: &Element, name: &str) -> bool {
+    !flag(el, name).unwrap_or(false)
+}
+
+/// Official-like line/scatter/area dPt, linear trendline, and y/fixedVal
+/// error bars. Styled, other types, or unknown children stay NI.
+fn read_official_like_series_decor(
+    ser: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+    n: usize,
+    kind: PlotKind,
+) -> Result<
+    (
+        Vec<Option<PointMarker>>,
+        Option<SeriesTrendline>,
+        Option<SeriesErrBars>,
+    ),
+    Error,
+> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let is_area = kind == PlotKind::StandardArea;
+    let mut point_markers = vec![None; n];
+    let mut area_used = vec![false; n];
+    let mut trendline = None;
+    let mut err_bars = None;
+    for child in ser.element_children() {
+        match child.local_name() {
+            "dPt" => {
+                let idx = number_val(child, "idx").ok_or_else(unsupported)?;
+                if !idx.is_finite() || idx < 0.0 || idx.fract() != 0.0 || idx as usize >= n
+                {
+                    return Err(unsupported());
+                }
+                let index = idx as usize;
+                if is_area {
+                    if area_used[index] {
+                        return Err(unsupported());
+                    }
+                    read_official_like_area_dpt(child, accents)?;
+                    area_used[index] = true;
+                    // Official Chart.Export of the F32 area dPt (explicit
+                    // srgb FF0000 at idx=3) shows no distinct point-region
+                    // fill. Do not invent a category-band paint rule.
+                } else {
+                    if point_markers[index].is_some() {
+                        return Err(unsupported());
+                    }
+                    point_markers[index] =
+                        Some(read_official_like_line_scatter_dpt(child, accents, dpi)?);
+                }
+            }
+            "trendline" => {
+                if trendline.is_some() {
+                    return Err(unsupported());
+                }
+                trendline = Some(read_official_like_trendline(child)?);
+            }
+            "errBars" => {
+                if err_bars.is_some() {
+                    return Err(unsupported());
+                }
+                err_bars = Some(read_official_like_err_bars(child)?);
+            }
+            _ => {}
+        }
+    }
+    Ok((point_markers, trendline, err_bars))
+}
+
+fn read_official_like_line_scatter_dpt(
+    dpt: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+) -> Result<PointMarker, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if !official_like_flag_off(dpt, "bubble3D") {
+        return Err(unsupported());
+    }
+    let mut marker = None;
+    for child in dpt.element_children() {
+        match child.local_name() {
+            "idx" | "bubble3D" => {}
+            "marker" => {
+                if marker.is_some() {
+                    return Err(unsupported());
+                }
+                marker = Some(read_official_like_dpt_marker(child, accents, dpi)?);
+            }
+            "extLst" => {
+                if !official_like_inert_unique_id_ext_lst(child) {
+                    return Err(unsupported());
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    // Require an explicit marker symbol and size. An omitted dPt marker
+    // would need an invented default color/symbol, which stays NI.
+    let (kind, color) = marker.ok_or_else(unsupported)?;
+    Ok(PointMarker {
+        marker: kind,
+        color,
+    })
+}
+
+fn read_official_like_dpt_marker(
+    marker: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+) -> Result<(MarkerKind, Option<[u8; 3]>), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let symbol = marker
+        .child_by_local("symbol")
+        .and_then(|el| el.attr_local("val"))
+        .ok_or_else(unsupported)?;
+    if symbol == "none" || symbol == "auto" {
+        return Err(unsupported());
+    }
+    let symbol = marker_symbol_from_name(symbol).ok_or_else(unsupported)?;
+    let size_pt = number_val(marker, "size").ok_or_else(unsupported)?;
+    if !size_pt.is_finite() || size_pt <= 0.0 {
+        return Err(unsupported());
+    }
+    let mut marker_color = None;
+    for child in marker.element_children() {
+        match child.local_name() {
+            "symbol" | "size" => {}
+            "spPr" => {
+                for sp in child.element_children() {
+                    match sp.local_name() {
+                        "solidFill" => {
+                            marker_color =
+                                Some(color_of_slot(sp, &accents).ok_or_else(unsupported)?);
+                        }
+                        "noFill" => return Err(unsupported()),
+                        "ln" => {
+                            let _ = read_solid_ln(sp, accents, 1.0, dpi)?;
+                        }
+                        "effectLst" => {
+                            if sp.element_children().next().is_some() {
+                                return Err(unsupported());
+                            }
+                        }
+                        _ => return Err(unsupported()),
+                    }
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok((shaped_marker(symbol, size_pt, dpi), marker_color))
+}
+
+fn read_official_like_area_dpt(dpt: &Element, accents: [[u8; 3]; 6]) -> Result<(), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if !official_like_flag_off(dpt, "bubble3D") {
+        return Err(unsupported());
+    }
+    let mut saw_fill = false;
+    for child in dpt.element_children() {
+        match child.local_name() {
+            "idx" | "bubble3D" => {}
+            "spPr" => {
+                for sp in child.element_children() {
+                    match sp.local_name() {
+                        "solidFill" => {
+                            if color_has_non_opaque_alpha(sp) {
+                                return Err(unsupported());
+                            }
+                            let _ = color_of_slot(sp, &accents).ok_or_else(unsupported)?;
+                            saw_fill = true;
+                        }
+                        _ => return Err(unsupported()),
+                    }
+                }
+            }
+            "extLst" => {
+                if !official_like_inert_unique_id_ext_lst(child) {
+                    return Err(unsupported());
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    // Accept the written opaque solidFill so the chart can export. The
+    // official F32 matrix does not discriminate a painted point region.
+    if !saw_fill {
+        return Err(unsupported());
+    }
+    Ok(())
+}
+
+fn read_official_like_trendline(el: &Element) -> Result<SeriesTrendline, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if !el
+        .attrs
+        .iter()
+        .all(|(k, _)| k == "xmlns" || k.starts_with("xmlns:"))
+    {
+        return Err(unsupported());
+    }
+    let mut saw_type = false;
+    for child in el.element_children() {
+        match child.local_name() {
+            "trendlineType" => {
+                if child.element_children().next().is_some() {
+                    return Err(unsupported());
+                }
+                if child.attr_local("val") != Some("linear") {
+                    return Err(unsupported());
+                }
+                saw_type = true;
+            }
+            "dispRSqr" | "dispEq" => {
+                if child.element_children().next().is_some() {
+                    return Err(unsupported());
+                }
+                if !matches!(child.attr_local("val"), Some("0" | "false" | "off")) {
+                    return Err(unsupported());
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    if !saw_type {
+        return Err(unsupported());
+    }
+    Ok(SeriesTrendline {
+        kind: TrendlineKind::Linear,
+    })
+}
+
+fn read_official_like_err_bars(el: &Element) -> Result<SeriesErrBars, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if !el
+        .attrs
+        .iter()
+        .all(|(k, _)| k == "xmlns" || k.starts_with("xmlns:"))
+    {
+        return Err(unsupported());
+    }
+    let mut typ = None;
+    let mut val = None;
+    let mut saw_fixed = false;
+    let mut end_caps = true;
+    for child in el.element_children() {
+        if child.element_children().next().is_some() {
+            return Err(unsupported());
+        }
+        match child.local_name() {
+            "errDir" => {
+                if child.attr_local("val") != Some("y") {
+                    return Err(unsupported());
+                }
+            }
+            "errBarType" => {
+                typ = Some(match child.attr_local("val") {
+                    Some("both") => ErrBarType::Both,
+                    Some("plus") => ErrBarType::Plus,
+                    Some("minus") => ErrBarType::Minus,
+                    _ => return Err(unsupported()),
+                });
+            }
+            "errValType" => {
+                if child.attr_local("val") != Some("fixedVal") {
+                    return Err(unsupported());
+                }
+                saw_fixed = true;
+            }
+            "noEndCap" => {
+                end_caps =
+                    matches!(child.attr_local("val"), Some("0" | "false" | "off") | None);
+            }
+            "val" => {
+                let parsed = child
+                    .attr_local("val")
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .filter(|n| n.is_finite() && *n >= 0.0)
+                    .ok_or_else(unsupported)?;
+                val = Some(parsed);
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    // Official gold writes errDir=y, errBarType=both, errValType=fixedVal,
+    // noEndCap=0, and val. Require the explicit type and a finite value;
+    // omitted errDir stays y as in OOXML. Other encodings stay NI.
+    if !saw_fixed {
+        return Err(unsupported());
+    }
+    let typ = typ.ok_or_else(unsupported)?;
+    let fixed_val = val.ok_or_else(unsupported)?;
+    Ok(SeriesErrBars {
+        typ,
+        fixed_val,
+        end_caps,
+    })
+}
+
+fn standard_line_combo_wrapper(wrap: &Element) -> bool {
+    if wrap.local_name() != "lineChart" {
+        return false;
+    }
+    let grouping = wrap
+        .child_by_local("grouping")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("standard");
+    if grouping != "standard"
+        || flag(wrap, "varyColors").unwrap_or(false)
+        || flag(wrap, "smooth").unwrap_or(false)
+    {
+        return false;
+    }
+    if wrap.element_children().any(|child| {
+        matches!(
+            child.local_name(),
+            "dropLines" | "hiLowLines" | "upDownBars"
+        )
+    }) {
+        return false;
+    }
+    wrap.element_children()
+        .filter(|el| el.local_name() == "ser")
+        .all(|ser| {
+            ser.child_by_local("marker")
+                .and_then(|m| m.child_by_local("symbol"))
+                .and_then(|s| s.attr_local("val"))
+                == Some("none")
+        })
+}
+
+fn standard_area_combo_wrapper(wrap: &Element) -> bool {
+    if wrap.local_name() != "areaChart" {
+        return false;
+    }
+    let grouping = wrap
+        .child_by_local("grouping")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("standard");
+    grouping == "standard"
+        && !flag(wrap, "varyColors").unwrap_or(false)
+        && !wrap
+            .element_children()
+            .any(|child| child.local_name() == "dropLines")
+}
+
+fn official_like_bar_line_wrappers(wrappers: &[&Element]) -> bool {
+    wrappers.len() == 2
+        && clustered_bar_wrapper(wrappers[0])
+        && standard_line_combo_wrapper(wrappers[1])
+        && wrapper_ser_count(wrappers[0]) == 1
+        && wrapper_ser_count(wrappers[1]) == 1
+}
+
+/// Official F26 shared-primary combos: clustered col + standard line
+/// (1 or 2 column series), or standard area + clustered col (1+1), sharing
+/// one catAx/valAx pair with crossBetween=between. Close-enough composition
+/// of already-locked paint paths; not a general F26 combo lock.
+fn official_like_shared_primary_combo(wrappers: &[&Element]) -> Result<(), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if wrappers.len() != 2 {
+        return Err(unsupported());
+    }
+    let ids0 = wrapper_ax_ids(wrappers[0]);
+    let ids1 = wrapper_ax_ids(wrappers[1]);
+    if ids0.len() != 2 || ids1.len() != 2 {
+        return Err(unsupported());
+    }
+    let same_axes = ids0.iter().all(|id| ids1.contains(id)) && ids1.iter().all(|id| ids0.contains(id));
+    if !same_axes {
+        return Err(unsupported());
+    }
+    for wrap in wrappers {
+        data_labels_hidden(wrap.child_by_local("dLbls"))?;
+    }
+    let n0 = wrapper_ser_count(wrappers[0]);
+    let n1 = wrapper_ser_count(wrappers[1]);
+    let col_line = clustered_col_wrapper(wrappers[0])
+        && standard_line_combo_wrapper(wrappers[1])
+        && (n0 == 1 || n0 == 2)
+        && n1 == 1;
+    let area_col = standard_area_combo_wrapper(wrappers[0])
+        && clustered_col_wrapper(wrappers[1])
+        && n0 == 1
+        && n1 == 1;
+    let col_area = clustered_col_wrapper(wrappers[0])
+        && standard_area_combo_wrapper(wrappers[1])
+        && n0 == 1
+        && n1 == 1;
+    if col_line || area_col || col_area {
+        Ok(())
+    } else {
+        Err(unsupported())
+    }
 }
 
 
@@ -1219,15 +2756,11 @@ pub(super) fn read_line_series(
     slot: usize,
     explicit_pens: bool,
 ) -> Result<LineSeriesStyle, Error> {
-    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
-    if flag(ser, "smooth").unwrap_or(false) {
-        return Err(unsupported());
-    }
-    for name in ["dPt", "trendline", "errBars"] {
-        if ser.child_by_local(name).is_some() {
-            return Err(unsupported());
-        }
-    }
+    // Official-like standard line series may set c:smooth=1. The
+    // StandardLine arm still rejects combo / radar / stacked / 3D /
+    // dashed cases. Scatter may override the flag after this returns.
+    // Official-like dPt / trendline / errBars are accepted later in
+    // the series constructor, not rejected here.
     let mut dash = None;
     let mut cap = stroke::Cap::Round;
     let mut join = stroke::Join::Round;
@@ -1256,6 +2789,7 @@ pub(super) fn read_line_series(
         width,
         marker,
         marker_color,
+        smooth: flag(ser, "smooth").unwrap_or(false),
     })
 }
 
@@ -1308,6 +2842,7 @@ pub(super) fn read_line_sp_pr(
         width,
         marker: MarkerKind::None,
         marker_color: None,
+        smooth: false,
     })
 }
 
@@ -1326,10 +2861,22 @@ pub(super) fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width
     // guessed global default. Only explicit cap values are expanded here.
     let cap = match ln.attr_local("cap") { Some(v) => stroke::Cap::from_ooxml(v).ok_or_else(unsupported)?, None => stroke::Cap::Round };
     if !explicit_caps && cap != stroke::Cap::Round { return Err(unsupported()); }
-    for (attr, allowed) in [
-        ("cmpd", &["sng"][..]),
-        ("algn", &["ctr"][..]),
-    ] {
+    // Official-like standard line charts may write non-sng ST_CompoundLine
+    // and algn=in. Close-enough export keeps the existing single centered
+    // stroke of the resolved pen; stripe ratios and inset offsets are not
+    // uniquely locked from the official one-width horizontal matrix and
+    // are not invented here. Other hosts keep the legacy sng/ctr gate.
+    let cmpd_allowed: &[&str] = if explicit_caps {
+        &["sng", "dbl", "thinThick", "thickThin", "tri"]
+    } else {
+        &["sng"]
+    };
+    let algn_allowed: &[&str] = if explicit_caps {
+        &["ctr", "in"]
+    } else {
+        &["ctr"]
+    };
+    for (attr, allowed) in [("cmpd", cmpd_allowed), ("algn", algn_allowed)] {
         if let Some(val) = ln.attr_local(attr) {
             if !allowed.contains(&val) {
                 return Err(unsupported());
@@ -1399,23 +2946,57 @@ pub(super) fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width
                 dash_declared = true;
                 let value = child.attr_local("val").unwrap_or("solid");
                 if value != "solid" {
-                    // Presets reuse the same run/cap/join sampler as custom
-                    // dashes. Explicit flat pens are native-verified for all
-                    // ten tokens; round dash/dot are separately discriminated.
-                    // No inferred default cap/width, square terminal-gap rule,
-                    // other host expansion, or legend/plot compensation.
-                    if !explicit_caps || ln.attr_local("cap").is_none()
-                        || !(cap == stroke::Cap::Flat || (cap == stroke::Cap::Round && matches!(value,"dash"|"dot")))
-                        || ln.attr_local("w").and_then(|v|v.parse::<f64>().ok()).is_none_or(|w|!w.is_finite() || w<=0.0)
+                    // Official-like standard line charts may omit cap and w.
+                    // Presets reuse the same run/cap/join sampler and the
+                    // DrawingML ST_PresetLineDashVal width-percent contract.
+                    // Omitted cap keeps the accepted Round baseline; omitted w
+                    // keeps the accepted default width (2.25pt / 4px at 106dpi).
+                    // Explicit caps already accepted for this pen (flat/sq/rnd)
+                    // reuse the same sampler. Close-enough export, not a unique
+                    // official-matrix lock of period or phase. Invalid explicit
+                    // widths, other hosts, and inferred COM weights stay out.
+                    let explicit_w = ln.attr_local("w");
+                    let parsed_w = explicit_w.and_then(|v| v.parse::<f64>().ok());
+                    if !explicit_caps
+                        || (explicit_w.is_some()
+                            && parsed_w.is_none_or(|w| !w.is_finite() || w <= 0.0))
                         || child.element_children().next().is_some()
-                        || child.attrs.iter().any(|(k,_)| k!="val" && !k.starts_with("xmlns"))
-                    { return Err(unsupported()); }
-                    dash=Some(std::sync::Arc::new(stroke::DashPattern::from_preset_width(value,width).ok_or_else(unsupported)?));
+                        || child
+                            .attrs
+                            .iter()
+                            .any(|(k, _)| k != "val" && !k.starts_with("xmlns"))
+                    {
+                        return Err(unsupported());
+                    }
+                    dash = Some(std::sync::Arc::new(
+                        stroke::DashPattern::from_preset_width(value, width)
+                            .ok_or_else(unsupported)?,
+                    ));
                 }
             }
             "round" => {},
             "bevel" | "miter" if explicit_caps => {},
             "miter" | "bevel" if cap == stroke::Cap::Round => {},
+            "headEnd" | "tailEnd" => {
+                // Official-like standard line charts may include line ends.
+                // Close-enough export paints the existing shaft; arrowhead
+                // geometry, shaft shortening, and sm/med/lg size contracts
+                // are not uniquely locked from the official one-width
+                // horizontal matrix and are not invented here.
+                if !explicit_caps
+                    || child.element_children().next().is_some()
+                    || child.attr_local("type").is_none_or(|v| {
+                        !matches!(v, "triangle" | "arrow" | "stealth" | "oval" | "diamond")
+                    })
+                    || child.attr_local("w").is_some_and(|v| !matches!(v, "sm" | "med" | "lg"))
+                    || child.attr_local("len").is_some_and(|v| !matches!(v, "sm" | "med" | "lg"))
+                    || child.attrs.iter().any(|(k, _)| {
+                        !matches!(k.as_str(), "type" | "w" | "len") && !k.starts_with("xmlns")
+                    })
+                {
+                    return Err(unsupported());
+                }
+            }
             "effectLst" => {
                 if child.element_children().next().is_some() {
                     return Err(unsupported());
@@ -1472,6 +3053,7 @@ pub(super) fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width
         width,
         marker: MarkerKind::None,
         marker_color: None,
+        smooth: false,
     })
 }
 
@@ -1549,10 +3131,119 @@ pub(super) fn pie_first_slice_ang(wrapper: &Element) -> Result<f64, Error> {
     }
 }
 
+
+/// Official-like pie series/dPt linear gradient. Coordinates are the pie
+/// plot square at paint time, not the F06 chart-frame rectangle. Only the
+/// official F38 0° / 90° `a:lin` encodings (flip none, rotWithShape 1,
+/// scaled 1, opaque or straight-alpha sRGB stops, empty tileRect, no path
+/// shade) are accepted. Close-enough, not a unique official-matrix lock.
+fn read_pie_sector_linear(grad: &Element) -> Result<LinearFrameGrad, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let flip = grad.attr_local("flip").unwrap_or("none");
+    if flip != "none" {
+        return Err(unsupported());
+    }
+    let rot = grad.attr_local("rotWithShape").unwrap_or("1");
+    if rot != "1" {
+        return Err(unsupported());
+    }
+    let mut gs_lst = None;
+    let mut lin = None;
+    for child in grad.element_children() {
+        match child.local_name() {
+            "gsLst" if gs_lst.is_none() => gs_lst = Some(child),
+            "lin" if lin.is_none() => lin = Some(child),
+            "tileRect" => {}
+            _ => return Err(unsupported()),
+        }
+    }
+    let lin = lin.ok_or_else(unsupported)?;
+    let gs_lst = gs_lst.ok_or_else(unsupported)?;
+    let scaled = lin.attr_local("scaled").unwrap_or("1");
+    if scaled != "1" {
+        return Err(unsupported());
+    }
+    let ang: i64 = lin
+        .attr_local("ang")
+        .ok_or_else(unsupported)?
+        .parse()
+        .map_err(|_| unsupported())?;
+    if ang != LINEAR_ANG_HORIZONTAL && ang != LINEAR_ANG_VERTICAL {
+        return Err(unsupported());
+    }
+    let mut raw_stops = Vec::new();
+    let mut any_alpha = false;
+    for gs in gs_lst.element_children() {
+        if gs.local_name() != "gs" {
+            return Err(unsupported());
+        }
+        let pos: u32 = gs
+            .attr_local("pos")
+            .ok_or_else(unsupported)?
+            .parse()
+            .map_err(|_| unsupported())?;
+        let mut colors = gs.element_children();
+        let color = colors.next().ok_or_else(unsupported)?;
+        if colors.next().is_some() {
+            return Err(unsupported());
+        }
+        if color.local_name() != "srgbClr" {
+            return Err(unsupported());
+        }
+        let rgb = parse_hex(color.attr_local("val").ok_or_else(unsupported)?)
+            .ok_or_else(unsupported)?;
+        let mut alpha = 255u8;
+        let mut saw_alpha = false;
+        for child in color.element_children() {
+            match child.local_name() {
+                "alpha" => {
+                    if saw_alpha {
+                        return Err(unsupported());
+                    }
+                    saw_alpha = true;
+                    let raw = child.attr_local("val").ok_or_else(unsupported)?;
+                    let val = raw
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|v| v.is_finite() && *v >= 0.0 && *v <= 100_000.0)
+                        .ok_or_else(unsupported)?;
+                    alpha = ooxml_alpha_to_u8(val.round() as u32);
+                }
+                _ => return Err(unsupported()),
+            }
+        }
+        if alpha != 255 {
+            any_alpha = true;
+        }
+        raw_stops.push((pos, rgb, alpha));
+    }
+    let use_close = any_alpha
+        || raw_stops.len() < 2
+        || raw_stops.first().is_some_and(|s| s.0 != 0)
+        || raw_stops.last().is_some_and(|s| s.0 != 100_000)
+        || {
+            let mut ordered = raw_stops.clone();
+            ordered.sort_by_key(|s| s.0);
+            ordered.windows(2).any(|pair| pair[0].0 == pair[1].0)
+        };
+    let stops = if use_close {
+        gradient::StopTable::close_enough(raw_stops).ok_or_else(unsupported)?
+    } else {
+        gradient::StopTable::new(raw_stops.into_iter().map(|(p, c, _)| (p, c)).collect())
+            .ok_or_else(unsupported)?
+    };
+    Ok(LinearFrameGrad {
+        stops,
+        ang,
+        path: None,
+    })
+}
+
 pub(super) fn read_pie_series_style(
     ser: &Element,
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
+    allow_sector_grad: bool,
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     data_labels_hidden(ser.child_by_local("dLbls"))?;
@@ -1570,7 +3261,7 @@ pub(super) fn read_pie_series_style(
         }
     }
     if let Some(sp) = ser.child_by_local("spPr") {
-        let _ = read_pie_sp_pr(sp, accents, dpi)?;
+        let _ = read_pie_sp_pr(sp, accents, dpi, allow_sector_grad)?;
     }
     Ok(LineSeriesStyle {
         join: stroke::Join::Round,
@@ -1581,6 +3272,7 @@ pub(super) fn read_pie_series_style(
         width: 0.0,
         marker: MarkerKind::None,
         marker_color: None,
+        smooth: false,
     })
 }
 
@@ -1635,7 +3327,7 @@ pub(super) fn pie_solid_fill(slot: &Element, accents: &[[u8; 3]; 6]) -> Result<S
     if alpha < 255 && node.local_name() != "srgbClr" {
         return Err(unsupported());
     }
-    Ok(SliceFill { color, alpha })
+    Ok(SliceFill::solid(color, alpha))
 }
 
 pub(super) fn pie_hidden_fill_memory(ext_lst: &Element) -> bool {
@@ -1664,6 +3356,7 @@ pub(super) fn read_pie_sp_pr(
     sp: &Element,
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
+    allow_sector_grad: bool,
 ) -> Result<Option<SliceFill>, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let mut fill = None;
@@ -1681,12 +3374,15 @@ pub(super) fn read_pie_sp_pr(
                     return Err(unsupported());
                 }
                 no_fill = true;
-                fill = Some(SliceFill {
-                    color: [0, 0, 0],
-                    alpha: 0,
-                });
+                fill = Some(SliceFill::solid([0, 0, 0], 0));
             }
-            "gradFill" | "pattFill" | "blipFill" => return Err(unsupported()),
+            "gradFill" => {
+                if !allow_sector_grad || no_fill || fill.is_some() {
+                    return Err(unsupported());
+                }
+                fill = Some(SliceFill::from_linear(read_pie_sector_linear(child)?));
+            }
+            "pattFill" | "blipFill" => return Err(unsupported()),
             "ln" => {
                 let line = read_solid_ln(child, accents, 0.0, dpi)?;
                 if line.visible {
@@ -1714,6 +3410,7 @@ pub(super) fn read_pie_point_colors(
     accents: [[u8; 3]; 6],
     n: usize,
     dpi: RenderDpi,
+    allow_sector_grad: bool,
 ) -> Result<
     (
         Vec<Option<[u8; 3]>>,
@@ -1731,7 +3428,7 @@ pub(super) fn read_pie_point_colors(
         _ => return Err(unsupported()),
     };
     let series_fill = match ser.child_by_local("spPr") {
-        Some(sp) => read_pie_sp_pr(sp, accents, dpi)?,
+        Some(sp) => read_pie_sp_pr(sp, accents, dpi, allow_sector_grad)?,
         None => None,
     };
     let mut colors = vec![None; n];
@@ -1781,11 +3478,11 @@ pub(super) fn read_pie_point_colors(
             }
         }
         if let Some(sp) = dpt.child_by_local("spPr") {
-            if let Some(fill) = read_pie_sp_pr(sp, accents, dpi)? {
-                point_fills[idx] = Some(fill);
+            if let Some(fill) = read_pie_sp_pr(sp, accents, dpi, allow_sector_grad)? {
                 if fill.alpha > 0 {
                     colors[idx] = Some(fill.color);
                 }
+                point_fills[idx] = Some(fill);
             }
         }
     }
@@ -1796,17 +3493,15 @@ pub(super) fn read_area_series(
     ser: &Element,
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
+    allow_complex_fills: bool,
 ) -> Result<AreaSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     if flag(ser, "smooth").unwrap_or(false) {
         return Err(unsupported());
     }
     data_labels_hidden(ser.child_by_local("dLbls"))?;
-    for name in ["dPt", "trendline", "errBars"] {
-        if ser.child_by_local(name).is_some() {
-            return Err(unsupported());
-        }
-    }
+    // Official-like dPt / trendline / errBars are accepted later in
+    // the series constructor, not rejected here.
     if let Some(marker) = ser.child_by_local("marker") {
         let symbol = marker
             .child_by_local("symbol")
@@ -1817,19 +3512,41 @@ pub(super) fn read_area_series(
         }
     }
     let mut fill = None;
+    let mut fill_alpha = 255u8;
+    let mut no_fill = false;
+    let mut pattern = None;
     let mut line_visible = false;
     let mut line_width = dpi.pt_to_px_font(2.25);
     let mut line_color = None;
+    let mut saw_fill = false;
+    let mut saw_hidden_ext = false;
     if let Some(sp) = ser.child_by_local("spPr") {
         for child in sp.element_children() {
             match child.local_name() {
                 "solidFill" => {
-                    if color_has_non_opaque_alpha(child) {
+                    if saw_fill {
                         return Err(unsupported());
                     }
-                    fill = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
+                    saw_fill = true;
+                    let (color, alpha) = read_official_like_area_solid(child, accents, allow_complex_fills)?;
+                    fill = Some(color);
+                    fill_alpha = alpha;
                 }
-                "noFill" => return Err(unsupported()),
+                "noFill" => {
+                    if !allow_complex_fills || saw_fill {
+                        return Err(unsupported());
+                    }
+                    saw_fill = true;
+                    no_fill = true;
+                }
+                "pattFill" => {
+                    if !allow_complex_fills || saw_fill {
+                        return Err(unsupported());
+                    }
+                    saw_fill = true;
+                    pattern = Some(read_official_like_area_pattern(child, accents)?);
+                    fill = Some(pattern.as_ref().unwrap().fg);
+                }
                 "ln" => {
                     if let Some(solid) = child.child_by_local("solidFill") {
                         if color_has_non_opaque_alpha(solid) {
@@ -1846,15 +3563,97 @@ pub(super) fn read_area_series(
                         return Err(unsupported());
                     }
                 }
+                "extLst" if is_office_hidden_fill_ext(child) => {
+                    saw_hidden_ext = true;
+                }
                 _ => return Err(unsupported()),
             }
         }
     }
+    if saw_hidden_ext && !no_fill {
+        return Err(unsupported());
+    }
     Ok(AreaSeriesStyle {
         fill,
+        fill_alpha,
+        no_fill,
+        pattern,
         line_visible,
         line_width,
         line_color,
+    })
+}
+
+/// Official-like area solid fill, including straight `a:alpha` on srgb/scheme
+/// colors. alphaMod/alphaOff stay NI. Close-enough compositing reuses the
+/// existing OOXML thousandths-of-a-percent mapping, not a unique table.
+fn read_official_like_area_solid(
+    slot: &Element,
+    accents: [[u8; 3]; 6],
+    allow_alpha: bool,
+) -> Result<([u8; 3], u8), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if color_has_non_opaque_alpha(slot) && !allow_alpha {
+        return Err(unsupported());
+    }
+    let color = color_of_slot(slot, &accents).ok_or_else(unsupported)?;
+    let Some(node) = slot
+        .child_by_local("srgbClr")
+        .or_else(|| slot.child_by_local("sysClr"))
+        .or_else(|| slot.child_by_local("schemeClr"))
+    else {
+        return Ok((color, 255));
+    };
+    let mut alpha = 255u8;
+    let mut saw_alpha = false;
+    for child in node.element_children() {
+        match child.local_name() {
+            "alpha" => {
+                if saw_alpha {
+                    return Err(unsupported());
+                }
+                saw_alpha = true;
+                let val = parse_ooxml_alpha(child.attr_local("val")).ok_or_else(unsupported)?;
+                alpha = ooxml_alpha_to_u8(val);
+            }
+            "alphaMod" | "alphaOff" => return Err(unsupported()),
+            "lumMod" | "lumOff" | "shade" | "tint" => {}
+            _ => {}
+        }
+    }
+    Ok((color, alpha))
+}
+
+fn read_official_like_area_pattern(
+    patt: &Element,
+    accents: [[u8; 3]; 6],
+) -> Result<super::pattern::PatternFill, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let prst = super::pattern::PatternPreset::parse(patt.attr_local("prst").ok_or_else(unsupported)?)
+        .ok_or_else(unsupported)?;
+    let mut fg = None;
+    let mut bg = None;
+    for child in patt.element_children() {
+        match child.local_name() {
+            "fgClr" if fg.is_none() => {
+                if color_has_non_opaque_alpha(child) {
+                    return Err(unsupported());
+                }
+                fg = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
+            }
+            "bgClr" if bg.is_none() => {
+                if color_has_non_opaque_alpha(child) {
+                    return Err(unsupported());
+                }
+                bg = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok(super::pattern::PatternFill {
+        prst,
+        fg: fg.ok_or_else(unsupported)?,
+        bg: bg.ok_or_else(unsupported)?,
     })
 }
 
@@ -1866,6 +3665,24 @@ pub(super) fn cache_numbers(parent: Option<&Element>) -> Vec<Option<f64>> {
         return Vec::new();
     };
     points_to_values(&read_pts(cache), parse_chart_number)
+}
+
+/// Parse numeric text from a strCache/strLit (or numCache) as numbers.
+/// Non-numeric cells (headers like "X") stay None.
+pub(super) fn cache_numeric_strings(parent: Option<&Element>) -> Vec<Option<f64>> {
+    let Some(parent) = parent else {
+        return Vec::new();
+    };
+    let Some(cache) = find_cache(parent) else {
+        return Vec::new();
+    };
+    points_to_values(&read_pts(cache), |text| {
+        let text = text.trim();
+        if text.is_empty() {
+            return None;
+        }
+        parse_chart_number(text).or_else(|| text.parse::<f64>().ok().filter(|n| n.is_finite()))
+    })
 }
 
 pub(super) fn cache_labels(parent: Option<&Element>) -> Vec<String> {
@@ -1929,25 +3746,64 @@ pub(super) fn value_label_height(font: Option<&Font>, gdi: Option<&super::super:
     gdi.map_or_else(|| text_height(font, px), |face| face.em_box())
 }
 
-/// Minimum locked General subset: ordinary integers (no scientific notation,
-/// locale-dependent separators or decimal precision approximation).
+/// Locked General integers are unchanged (no scientific notation or locale
+/// separators). Finite non-integers use a close-enough General decimal: 10
+/// fraction digits with trailing zeros trimmed, so official 9.1999… becomes
+/// "9.2". This is not a unique official precision lock. Non-finite values
+/// and magnitudes >= 1e11 still stay unsupported.
 pub(super) fn value_label_text(value: f64) -> Option<String> {
-    if !value.is_finite() || value.fract() != 0.0 || value.abs() >= 100_000_000_000.0 {
+    if !value.is_finite() || value.abs() >= 100_000_000_000.0 {
         return None;
     }
-    Some(if value == 0.0 {
-        "0".to_owned()
-    } else {
-        format!("{value:.0}")
-    })
+    if value.fract() == 0.0 {
+        return Some(if value == 0.0 {
+            "0".to_owned()
+        } else {
+            format!("{value:.0}")
+        });
+    }
+    let mut text = format!("{value:.10}");
+    if let Some(dot) = text.find('.') {
+        while text.ends_with('0') && text.len() > dot + 1 {
+            text.pop();
+        }
+        if text.ends_with('.') {
+            text.pop();
+        }
+    }
+    Some(text)
 }
 
-/// Only deletion-only series point labels are locked. Known Excel editing
-/// identity extensions carry no paint semantics; unknown extensions stay NI.
-pub(super) fn read_deleted_label_points(labels: Option<&Element>, len: usize) -> Result<Vec<usize>, Error> {
+/// Series-level point visibility is a general rule, not a unique pixel lock.
+/// `delete=true` or `showVal=false` hides that label; `delete=false` or
+/// `showVal=true` keeps it. Known Excel editing identity extensions stay
+/// inert; unknown extensions, conflicting flags, and visible position/style
+/// or custom text remain NI.
+#[derive(Debug)]
+pub(super) struct PointLabelVisibility {
+    pub deleted: Vec<usize>,
+    pub shown: Vec<usize>,
+}
+
+fn parse_onoff_attr(e: &Element) -> Option<bool> {
+    match e.attr_local("val") {
+        None | Some("1") | Some("true") => Some(true),
+        Some("0") | Some("false") | Some("off") => Some(false),
+        _ => None,
+    }
+}
+
+pub(super) fn read_deleted_label_points(
+    labels: Option<&Element>,
+    len: usize,
+) -> Result<PointLabelVisibility, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let empty = || PointLabelVisibility {
+        deleted: Vec::new(),
+        shown: Vec::new(),
+    };
     let Some(labels) = labels else {
-        return Ok(Vec::new());
+        return Ok(empty());
     };
     let scalar = |e: &Element| {
         e.element_children().next().is_none()
@@ -1958,6 +3814,7 @@ pub(super) fn read_deleted_label_points(labels: Option<&Element>, len: usize) ->
             && e.attrs.iter().filter(|(k, _)| k == "val").count() <= 1
     };
     let mut deleted = Vec::new();
+    let mut shown = Vec::new();
     for point in labels
         .element_children()
         .filter(|e| e.local_name() == "dLbl")
@@ -1966,7 +3823,8 @@ pub(super) fn read_deleted_label_points(labels: Option<&Element>, len: usize) ->
             return Err(unsupported());
         }
         let mut idx = None;
-        let mut delete_seen = false;
+        let mut delete = None;
+        let mut show_val = None;
         let mut ext_seen = false;
         for child in point.element_children() {
             match child.local_name() {
@@ -1977,12 +3835,11 @@ pub(super) fn read_deleted_label_points(labels: Option<&Element>, len: usize) ->
                     }
                     idx = Some(raw.parse::<usize>().map_err(|_| unsupported())?);
                 }
-                "delete"
-                    if !delete_seen
-                        && scalar(child)
-                        && matches!(child.attr_local("val"), None | Some("1" | "true")) =>
-                {
-                    delete_seen = true;
+                "delete" if delete.is_none() && scalar(child) => {
+                    delete = Some(parse_onoff_attr(child).ok_or_else(unsupported)?);
+                }
+                "showVal" if show_val.is_none() && scalar(child) => {
+                    show_val = Some(parse_onoff_attr(child).ok_or_else(unsupported)?);
                 }
                 "extLst" if !ext_seen => {
                     ext_seen = true;
@@ -2013,18 +3870,34 @@ pub(super) fn read_deleted_label_points(labels: Option<&Element>, len: usize) ->
             }
         }
         let idx = idx.ok_or_else(unsupported)?;
-        if !delete_seen || idx >= len {
+        if idx >= len {
             return Err(unsupported());
         }
-        deleted.push(idx);
+        let hide = match (delete, show_val) {
+            (Some(true), None | Some(false)) => true,
+            (Some(false), None | Some(true)) => false,
+            (None, Some(false)) => true,
+            (None, Some(true)) => false,
+            (None, None) | (Some(true), Some(true)) | (Some(false), Some(false)) => {
+                return Err(unsupported());
+            }
+        };
+        if hide {
+            deleted.push(idx);
+        } else {
+            shown.push(idx);
+        }
     }
     // Keep input-sized work O(n log n), including duplicate validation and
     // point lookup during painting; do not add a quadratic resource path.
     deleted.sort_unstable();
-    if deleted.windows(2).any(|pair| pair[0] == pair[1]) {
+    shown.sort_unstable();
+    if deleted.windows(2).any(|pair| pair[0] == pair[1])
+        || shown.windows(2).any(|pair| pair[0] == pair[1])
+    {
         return Err(unsupported());
     }
-    Ok(deleted)
+    Ok(PointLabelVisibility { deleted, shown })
 }
 
 /// Only these non-bubble chart kinds reach this parser. Excel writes
@@ -2067,12 +3940,14 @@ pub(super) fn read_value_label(
             "showCatName",
             "showSerName",
             "showPercent",
-            "showLeaderLines",
         ] {
             if flag(labels, name).unwrap_or(false) {
                 return Err(unsupported());
             }
         }
+        // showLeaderLines is not a content flag: official F24 pie3D and F25
+        // radar/stock write it on hidden dLbls. Reject only when labels are
+        // visible (leader geometry is not locked).
         if let Some(v) = flag(labels, "showVal") {
             visible = v;
         }
@@ -2085,6 +3960,12 @@ pub(super) fn read_value_label(
     }
     if !visible {
         return Ok(None);
+    }
+    if configs
+        .iter()
+        .any(|(_, labels)| flag(labels, "showLeaderLines").unwrap_or(false))
+    {
+        return Err(unsupported());
     }
     for (_, labels) in configs {
         // Hidden label styling cannot affect output. Visible custom styling is
@@ -2138,7 +4019,9 @@ pub(super) fn read_value_label(
         (PlotKind::ClusteredColumn | PlotKind::ClusteredBar, "outEnd") => {
             Ok(Some(ValueLabel::OutsideEnd))
         }
-        (PlotKind::ClusteredColumn, "inEnd") => Ok(Some(ValueLabel::InsideEnd)),
+        (PlotKind::ClusteredColumn | PlotKind::ClusteredBar, "inEnd") => {
+            Ok(Some(ValueLabel::InsideEnd))
+        }
         (PlotKind::StandardLine, "r") => Ok(Some(ValueLabel::Right)),
         _ => Err(unsupported()),
     }
@@ -2188,13 +4071,16 @@ pub(super) fn data_labels_hidden(dlbls: Option<&Element>) -> Result<(), Error> {
     {
         return Err(unsupported());
     }
+    // Official Excel 16 pie3D writes showLeaderLines=1 with every content
+    // flag off. With no visible labels there is nothing to lead, so the
+    // flag is inert and must not block Chart.Export. Visible label content
+    // (showVal / showCatName / …) still stays NI here.
     for name in [
         "showLegendKey",
         "showVal",
         "showCatName",
         "showSerName",
         "showPercent",
-        "showLeaderLines",
     ] {
         if flag(dlbls, name).unwrap_or(false) {
             return Err(unsupported());

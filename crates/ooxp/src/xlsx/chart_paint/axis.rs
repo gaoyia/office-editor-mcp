@@ -24,6 +24,10 @@ pub(super) struct Spec {
     /// Official Excel 16 valAx/delete=true (HasAxis(xlValue)=false or Axes.Delete).
     /// Distinct from tickLblPos=none, which keeps the axis line.
     pub deleted: bool,
+    /// Official Excel 16 valAx tickLblPos=none (TickLabels.Delete / none).
+    /// Releases the value-label gutter and omits tick labels, but keeps the
+    /// axis line and major tick marks. Not the same as delete=true.
+    pub hide_tick_labels: bool,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(super) enum CatCrosses {
@@ -43,6 +47,7 @@ pub(super) struct Scale {
     pub tick_format: TickFormat,
     pub reversed: bool,
     pub deleted: bool,
+    pub hide_tick_labels: bool,
 }
 /// Official Excel 16 valAx formatCode values locked from Chart.Export at
 /// window DPI 106 (decimal `.`, thousands `,`). Any other code stays NI.
@@ -77,6 +82,11 @@ impl Scale {
         } else {
             matches!(self.cat_crosses, CatCrosses::Max)
         }
+    }
+    /// Value tick labels (and their gutter) are omitted for delete=true or
+    /// tickLblPos=none. The axis line is independent: only delete=true drops it.
+    pub fn value_labels_visible(&self) -> bool {
+        !self.deleted && !self.hide_tick_labels
     }
     /// Category labels occupy the bottom gutter when the crossing sits on
     /// the visual bottom edge (minMax at min, or maxMin at max).
@@ -168,8 +178,42 @@ fn read_cat_crosses(plot: &Element) -> Result<(Option<f64>, CatCrosses), Error> 
     Ok((None, mode))
 }
 
-fn values_out_of_log_range(raw_min: f64, raw_max: f64, min: f64, max: f64) -> bool {
-    !raw_min.is_finite() || !raw_max.is_finite() || raw_min < min - 1e-12 || raw_max > max + 1e-12
+fn values_out_of_log_range(raw_min: f64, raw_max: f64, _min: f64, max: f64) -> bool {
+    // Non-positive values and overflow above the explicit max stay NI.
+    // A finite value above 0 but below the log min is a close-enough clip
+    // (official F15-6 paints a thin sliver), not a reject.
+    !raw_min.is_finite() || !raw_max.is_finite() || raw_min <= 0.0 || raw_max > max + 1e-12
+}
+
+/// Official F15 auto log axes (including log2 data 4/8/16/32) used min=1
+/// whenever every finite value was >= 1. max is the integer power of `base`
+/// at or above the data max. Degenerate or unsampled ranges (values < 1,
+/// non-positive points, max<=min) stay NI. Close-enough general rule, not
+/// a unique lock for unsampled high-only floors.
+fn auto_log_bounds(raw_min: f64, raw_max: f64, base: f64) -> Result<(f64, f64), Error> {
+    if raw_min < 1.0
+        || raw_max < 1.0
+        || !raw_min.is_finite()
+        || !raw_max.is_finite()
+        || base <= 1.0
+        || !base.is_finite()
+    {
+        return Err(unsupported());
+    }
+    let max_exp = raw_max.log(base);
+    if !max_exp.is_finite() {
+        return Err(unsupported());
+    }
+    let max_exp = if (max_exp - max_exp.round()).abs() <= 1e-9 {
+        max_exp.round()
+    } else {
+        max_exp.ceil()
+    };
+    let max = base.powf(max_exp);
+    if max <= 1.0 || !is_integer_power(max, base) {
+        return Err(unsupported());
+    }
+    Ok((1.0, max))
 }
 
 fn is_integer_power(value: f64, base: f64) -> bool {
@@ -264,6 +308,14 @@ impl Spec {
             return Err(unsupported());
         }
         let tick_format = read_tick_format_kind(axis, percent_stacked)?;
+        // Official F20-5: valAx tickLblPos=none hides labels and releases the
+        // gutter but keeps the axis line. nextTo/omitted keep current labels.
+        // Other positions are left unread (same as before this lock).
+        let hide_tick_labels = matches!(
+            axis.child_by_local("tickLblPos")
+                .and_then(|e| e.attr_local("val")),
+            Some("none")
+        );
         let read = |node: Option<&Element>, name: &str| -> Result<Option<f64>, Error> {
             let Some(el) = node.and_then(|n| n.child_by_local(name)) else {
                 return Ok(None);
@@ -286,6 +338,7 @@ impl Spec {
             tick_format,
             reversed,
             deleted,
+            hide_tick_labels,
         };
         if spec.major.is_some_and(|v| v <= 0.0)
             || spec.minor.is_some_and(|v| v <= 0.0)
@@ -295,20 +348,24 @@ impl Spec {
         }
         if let Some(base) = spec.log_base {
             // Official Excel 16 log axes write no majorUnit/minorUnit; custom
-            // steps are not uniquely locked. Auto min/max (omitted in XML) stay
-            // NI. Only explicit positive power-of-base ends are accepted here.
+            // steps are not uniquely locked. Both explicit ends omitted is auto
+            // (resolved from data in scale_values). A single explicit end stays
+            // NI. Explicit ends must still be >=1 integer powers of the base.
             if spec.major.is_some() || spec.minor.is_some() {
                 return Err(unsupported());
             }
-            let (Some(min), Some(max)) = (spec.min, spec.max) else {
-                return Err(unsupported());
-            };
-            if min < 1.0
-                || max <= min
-                || !is_integer_power(min, base)
-                || !is_integer_power(max, base)
-            {
-                return Err(unsupported());
+            match (spec.min, spec.max) {
+                (None, None) => {}
+                (Some(min), Some(max)) => {
+                    if min < 1.0
+                        || max <= min
+                        || !is_integer_power(min, base)
+                        || !is_integer_power(max, base)
+                    {
+                        return Err(unsupported());
+                    }
+                }
+                _ => return Err(unsupported()),
             }
             // Official F15 log evidence used formatCode General only.
             if spec.tick_format != TickFormat::General {
@@ -325,6 +382,16 @@ impl Spec {
         }
         // Official F20 evidence is linear autoZero minMax only.
         if spec.deleted
+            && (spec.log_base.is_some()
+                || spec.reversed
+                || spec.crosses_at.is_some()
+                || !matches!(spec.cat_crosses, CatCrosses::AutoZero))
+        {
+            return Err(unsupported());
+        }
+        // Official F20-5 tickLblPos=none evidence is the same linear autoZero
+        // minMax subset. log/maxMin/custom crosses stay NI.
+        if spec.hide_tick_labels
             && (spec.log_base.is_some()
                 || spec.reversed
                 || spec.crosses_at.is_some()
@@ -367,6 +434,12 @@ pub(super) struct SecondaryAxes {
     pub secondary: Spec,
     pub primary_val_id: String,
     pub secondary_val_id: String,
+    /// Official bar secondary keeps catAx minMax, so the first category is at the bottom.
+    pub cats_from_bottom: bool,
+    /// Official F26-5 bar+line auto-secondary: valAx on the right, hidden
+    /// catAx at the bottom. The line uses column orientation. Not a general
+    /// F26 combo lock.
+    pub line_on_right: bool,
 }
 
 fn ax_id(axis: &Element) -> Option<&str> {
@@ -398,9 +471,9 @@ fn axis_orient(axis: &Element) -> &str {
         .unwrap_or("minMax")
 }
 
-fn locked_hidden_secondary_cat(cat: &Element, val_id: &str) -> bool {
+fn locked_hidden_secondary_cat(cat: &Element, val_id: &str, pos: &str) -> bool {
     axis_deleted(cat)
-        && ax_pos(cat) == "b"
+        && ax_pos(cat) == pos
         && axis_orient(cat) == "minMax"
         && cat.child_by_local("majorGridlines").is_none()
         && cat
@@ -414,9 +487,9 @@ fn locked_hidden_secondary_cat(cat: &Element, val_id: &str) -> bool {
             == Some(val_id)
 }
 
-fn locked_primary_cat(cat: &Element, val_id: &str) -> bool {
+fn locked_primary_cat(cat: &Element, val_id: &str, pos: &str) -> bool {
     !axis_deleted(cat)
-        && ax_pos(cat) == "b"
+        && ax_pos(cat) == pos
         && axis_orient(cat) == "minMax"
         && cat.child_by_local("majorGridlines").is_none()
         && cat
@@ -467,22 +540,21 @@ fn read_secondary_placement_fields(axis: &Element) -> Result<Spec, Error> {
         tick_format,
         reversed,
         deleted,
+        hide_tick_labels: false,
     };
     if spec.major.is_some_and(|v| v <= 0.0)
         || spec.minor.is_some_and(|v| v <= 0.0)
         || matches!((spec.min, spec.max), (Some(a), Some(b)) if a >= b)
         || spec.deleted
         || spec.reversed
-        || spec.min.is_none()
-        || spec.max.is_none()
     {
         return Err(unsupported());
     }
     Ok(spec)
 }
 
-fn read_secondary_val_axis(axis: &Element) -> Result<Spec, Error> {
-    if ax_pos(axis) != "r" {
+fn read_secondary_val_axis(axis: &Element, pos: &str) -> Result<Spec, Error> {
+    if ax_pos(axis) != pos {
         return Err(unsupported());
     }
     if axis_crosses(axis) != Some("max") || axis.child_by_local("crossesAt").is_some() {
@@ -512,28 +584,40 @@ pub(super) fn read_locked_secondary_axes(plot: &Element) -> Result<SecondaryAxes
     if vals.len() != 2 || cats.len() != 2 {
         return Err(unsupported());
     }
-    if vals.iter().filter(|ax| ax_pos(ax) == "l").count() != 1
-        || vals.iter().filter(|ax| ax_pos(ax) == "r").count() != 1
-    {
+    // Column / line / area: primary valAx l, secondary valAx r, both catAx b.
+    // Clustered bar: value axis is horizontal, so primary valAx b, secondary
+    // valAx t (crosses=max still means the opposite edge), both catAx l.
+    // This is the already-locked pairing composed with bar geometry, not a
+    // new unique official-matrix lock.
+    let col_layout = vals.iter().filter(|ax| ax_pos(ax) == "l").count() == 1
+        && vals.iter().filter(|ax| ax_pos(ax) == "r").count() == 1;
+    let bar_layout = vals.iter().filter(|ax| ax_pos(ax) == "b").count() == 1
+        && vals.iter().filter(|ax| ax_pos(ax) == "t").count() == 1;
+    if !col_layout && !bar_layout {
         return Err(unsupported());
     }
+    let (primary_pos, secondary_pos, cat_pos) = if bar_layout {
+        ("b", "t", "l")
+    } else {
+        ("l", "r", "b")
+    };
     let primary_val = vals
         .iter()
-        .find(|ax| ax_pos(ax) == "l")
+        .find(|ax| ax_pos(ax) == primary_pos)
         .ok_or_else(unsupported)?;
     let secondary_val = vals
         .iter()
-        .find(|ax| ax_pos(ax) == "r")
+        .find(|ax| ax_pos(ax) == secondary_pos)
         .ok_or_else(unsupported)?;
     let primary_val_id = ax_id(primary_val).ok_or_else(unsupported)?.to_string();
     let secondary_val_id = ax_id(secondary_val).ok_or_else(unsupported)?.to_string();
     let primary_cat = cats
         .iter()
-        .find(|cat| locked_primary_cat(cat, &primary_val_id))
+        .find(|cat| locked_primary_cat(cat, &primary_val_id, cat_pos))
         .ok_or_else(unsupported)?;
     let secondary_cat = cats
         .iter()
-        .find(|cat| locked_hidden_secondary_cat(cat, &secondary_val_id))
+        .find(|cat| locked_hidden_secondary_cat(cat, &secondary_val_id, cat_pos))
         .ok_or_else(unsupported)?;
     if std::ptr::eq(*primary_cat, *secondary_cat) {
         return Err(unsupported());
@@ -552,9 +636,10 @@ pub(super) fn read_locked_secondary_axes(plot: &Element) -> Result<SecondaryAxes
         return Err(unsupported());
     }
     let primary = Spec::read_axis(primary_val)?;
-    if primary.min.is_none()
-        || primary.max.is_none()
-        || primary.deleted
+    // Omitted min/max/major reuse existing scale_values auto bounds
+    // (close-enough; official F21-6 is visually near explicit 0-10 / 0-100).
+    // Do not claim a unique official auto-scale lock.
+    if primary.deleted
         || primary.reversed
         || primary.log_base.is_some()
         || primary.crosses_at.is_some()
@@ -562,12 +647,100 @@ pub(super) fn read_locked_secondary_axes(plot: &Element) -> Result<SecondaryAxes
     {
         return Err(unsupported());
     }
-    let secondary = read_secondary_val_axis(secondary_val)?;
+    let secondary = read_secondary_val_axis(secondary_val, secondary_pos)?;
     Ok(SecondaryAxes {
         primary,
         secondary,
         primary_val_id,
         secondary_val_id,
+        cats_from_bottom: true,
+        line_on_right: false,
+    })
+}
+
+/// Official F26-5: clustered bar primary (catAx l, valAx b) plus a standard
+/// line on a secondary valAx r / hidden catAx b. Close-enough composition of
+/// already-locked bar geometry and line-on-right pairing; not a general F26 lock.
+pub(super) fn read_locked_bar_line_mixed_secondary(plot: &Element) -> Result<SecondaryAxes, Error> {
+    if plot
+        .element_children()
+        .any(|e| matches!(e.local_name(), "dateAx" | "serAx"))
+    {
+        return Err(unsupported());
+    }
+    let vals: Vec<_> = plot
+        .element_children()
+        .filter(|e| e.local_name() == "valAx")
+        .collect();
+    let cats: Vec<_> = plot
+        .element_children()
+        .filter(|e| e.local_name() == "catAx")
+        .collect();
+    if vals.len() != 2 || cats.len() != 2 {
+        return Err(unsupported());
+    }
+    if vals.iter().filter(|ax| ax_pos(ax) == "b").count() != 1
+        || vals.iter().filter(|ax| ax_pos(ax) == "r").count() != 1
+        || cats.iter().filter(|ax| ax_pos(ax) == "l").count() != 1
+        || cats
+            .iter()
+            .filter(|ax| ax_pos(ax) == "b" && axis_deleted(ax))
+            .count()
+            != 1
+    {
+        return Err(unsupported());
+    }
+    let primary_val = vals
+        .iter()
+        .find(|ax| ax_pos(ax) == "b")
+        .ok_or_else(unsupported)?;
+    let secondary_val = vals
+        .iter()
+        .find(|ax| ax_pos(ax) == "r")
+        .ok_or_else(unsupported)?;
+    let primary_val_id = ax_id(primary_val).ok_or_else(unsupported)?.to_string();
+    let secondary_val_id = ax_id(secondary_val).ok_or_else(unsupported)?.to_string();
+    let primary_cat = cats
+        .iter()
+        .find(|cat| locked_primary_cat(cat, &primary_val_id, "l"))
+        .ok_or_else(unsupported)?;
+    let secondary_cat = cats
+        .iter()
+        .find(|cat| locked_hidden_secondary_cat(cat, &secondary_val_id, "b"))
+        .ok_or_else(unsupported)?;
+    if std::ptr::eq(*primary_cat, *secondary_cat) {
+        return Err(unsupported());
+    }
+    let primary_cat_id = ax_id(primary_cat).ok_or_else(unsupported)?;
+    let secondary_cat_id = ax_id(secondary_cat).ok_or_else(unsupported)?;
+    if primary_val
+        .child_by_local("crossAx")
+        .and_then(|e| e.attr_local("val"))
+        != Some(primary_cat_id)
+        || secondary_val
+            .child_by_local("crossAx")
+            .and_then(|e| e.attr_local("val"))
+            != Some(secondary_cat_id)
+    {
+        return Err(unsupported());
+    }
+    let primary = Spec::read_axis(primary_val)?;
+    if primary.deleted
+        || primary.reversed
+        || primary.log_base.is_some()
+        || primary.crosses_at.is_some()
+        || !matches!(primary.cat_crosses, CatCrosses::AutoZero)
+    {
+        return Err(unsupported());
+    }
+    let secondary = read_secondary_val_axis(secondary_val, "r")?;
+    Ok(SecondaryAxes {
+        primary,
+        secondary,
+        primary_val_id,
+        secondary_val_id,
+        cats_from_bottom: true,
+        line_on_right: true,
     })
 }
 
@@ -779,18 +952,23 @@ pub(super) fn scale_values(
         raw_max = 0.0;
     }
     if let Some(base) = spec.log_base {
-        let min = spec.min.ok_or_else(unsupported)?;
-        let max = spec.max.ok_or_else(unsupported)?;
+        let (min, max) = match (spec.min, spec.max) {
+            (Some(min), Some(max)) => (min, max),
+            (None, None) => auto_log_bounds(raw_min, raw_max, base)?,
+            _ => return Err(unsupported()),
+        };
         // Official F16/F17 log evidence had autoZero only; custom crosses stay NI.
         if spec.crosses_at.is_some()
             || !matches!(spec.cat_crosses, CatCrosses::AutoZero)
             || spec.tick_format != TickFormat::General
             || spec.reversed
             || spec.deleted
+            || spec.hide_tick_labels
         {
             return Err(unsupported());
         }
-        // Out-of-range values (official clip stubs) and non-positive points stay NI.
+        // Non-positive points and values above the max stay NI. A positive
+        // value below the log min is clipped at paint time (close-enough).
         if values_out_of_log_range(raw_min, raw_max, min, max) {
             return Err(unsupported());
         }
@@ -805,6 +983,7 @@ pub(super) fn scale_values(
             tick_format: TickFormat::General,
             reversed: false,
             deleted: false,
+            hide_tick_labels: false,
         });
     }
     // Excel may choose a nonzero minimum for tightly clustered one-sided data.
@@ -888,6 +1067,7 @@ pub(super) fn scale_values(
         tick_format: spec.tick_format,
         reversed: spec.reversed,
         deleted: spec.deleted,
+        hide_tick_labels: spec.hide_tick_labels,
     })
 }
 
@@ -923,6 +1103,7 @@ mod tests {
                 tick_format: TickFormat::General,
                 reversed: false,
                 deleted: false,
+                hide_tick_labels: false,
             };
             let budget = interval_budget(row["height96"].as_u64().unwrap() as u32, label_em);
             let result = scale(&[series], spec, budget);
@@ -1054,11 +1235,18 @@ mod tests {
             (s.min, s.max, s.major, s.minor),
             (Some(-2.0), Some(8.0), Some(2.0), Some(0.5))
         );
-        for bad in ["<logBase val='10'/>", "<orientation val='xyz'/>"] {
-            let xml = format!("<plotArea><valAx><scaling>{bad}</scaling></valAx></plotArea>");
-            let d = crate::xml::parse(xml.as_bytes()).unwrap();
-            assert!(Spec::read(&d.root).is_err());
-        }
+        let auto_log = crate::xml::parse(
+            b"<plotArea><valAx><scaling><logBase val='10'/></scaling></valAx></plotArea>",
+        )
+        .unwrap();
+        let auto_spec = Spec::read(&auto_log.root).expect("omitted log min/max must parse as auto");
+        assert_eq!(auto_spec.log_base, Some(10.0));
+        assert_eq!((auto_spec.min, auto_spec.max), (None, None));
+        let bad_orient = crate::xml::parse(
+            b"<plotArea><valAx><scaling><orientation val='xyz'/></scaling></valAx></plotArea>",
+        )
+        .unwrap();
+        assert!(Spec::read(&bad_orient.root).is_err());
         let rev = crate::xml::parse(
             b"<plotArea><valAx><scaling><orientation val='maxMin'/><min val='-8'/><max val='8'/></scaling><majorUnit val='2'/></valAx></plotArea>",
         )
@@ -1087,6 +1275,36 @@ mod tests {
         .unwrap();
         let s = Spec::read(&deleted.root).unwrap();
         assert!(s.deleted);
+        assert!(!s.hide_tick_labels);
+        let none = crate::xml::parse(
+            b"<plotArea><valAx><scaling><min val='-8'/><max val='8'/></scaling><majorUnit val='2'/><tickLblPos val='none'/></valAx></plotArea>",
+        )
+        .unwrap();
+        let s = Spec::read(&none.root).unwrap();
+        assert!(s.hide_tick_labels);
+        assert!(!s.deleted);
+        let next_to = crate::xml::parse(
+            b"<plotArea><valAx><scaling><min val='-8'/><max val='8'/></scaling><majorUnit val='2'/><tickLblPos val='nextTo'/></valAx></plotArea>",
+        )
+        .unwrap();
+        let s = Spec::read(&next_to.root).unwrap();
+        assert!(!s.hide_tick_labels);
+        let log_none = crate::xml::parse(
+            b"<plotArea><valAx><scaling><logBase val='10'/><min val='1'/><max val='1000'/></scaling><tickLblPos val='none'/></valAx></plotArea>",
+        )
+        .unwrap();
+        assert!(
+            Spec::read(&log_none.root).is_err(),
+            "log plus tickLblPos=none stays NI"
+        );
+        let rev_none = crate::xml::parse(
+            b"<plotArea><valAx><scaling><orientation val='maxMin'/><min val='-8'/><max val='8'/></scaling><tickLblPos val='none'/></valAx></plotArea>",
+        )
+        .unwrap();
+        assert!(
+            Spec::read(&rev_none.root).is_err(),
+            "orientation=maxMin plus tickLblPos=none stays NI"
+        );
         let log_del = crate::xml::parse(
             b"<plotArea><valAx><scaling><logBase val='10'/><min val='1'/><max val='1000'/></scaling><delete val='1'/></valAx></plotArea>",
         )
@@ -1135,6 +1353,7 @@ mod tests {
             tick_format: TickFormat::General,
             reversed: false,
             deleted: false,
+            hide_tick_labels: false,
         };
         let ok = scale_values(
             [Some(1.0), Some(10.0), Some(100.0), Some(1000.0)].into_iter(),
@@ -1146,9 +1365,51 @@ mod tests {
             (ok.min, ok.max, ok.major, ok.log_base),
             (1.0, 1000.0, 10.0, Some(10.0))
         );
+        let clipped = scale_values([Some(1.0), Some(10.0), Some(0.5)].into_iter(), spec, 10)
+            .expect("positive values below the explicit log min must scale, not reject");
+        assert_eq!((clipped.min, clipped.max, clipped.major), (1.0, 1000.0, 10.0));
         assert!(
-            scale_values([Some(1.0), Some(10.0), Some(0.5)].into_iter(), spec, 10).is_err(),
-            "values below the explicit log min must stay NI"
+            scale_values([Some(0.0), Some(10.0), Some(100.0)].into_iter(), spec, 10).is_err(),
+            "non-positive log values stay NI"
+        );
+        let auto = Spec {
+            min: None,
+            max: None,
+            major: None,
+            minor: None,
+            log_base: Some(10.0),
+            crosses_at: None,
+            cat_crosses: CatCrosses::AutoZero,
+            tick_format: TickFormat::General,
+            reversed: false,
+            deleted: false,
+            hide_tick_labels: false,
+        };
+        let auto10 = scale_values(
+            [Some(1.0), Some(10.0), Some(100.0), Some(1000.0)].into_iter(),
+            auto,
+            10,
+        )
+        .unwrap();
+        assert_eq!(
+            (auto10.min, auto10.max, auto10.major, auto10.log_base),
+            (1.0, 1000.0, 10.0, Some(10.0))
+        );
+        let auto_off = scale_values([Some(3.0), Some(30.0), Some(300.0)].into_iter(), auto, 10)
+            .unwrap();
+        assert_eq!((auto_off.min, auto_off.max, auto_off.major), (1.0, 1000.0, 10.0));
+        let mut auto2 = auto;
+        auto2.log_base = Some(2.0);
+        let log2 = scale_values(
+            [Some(4.0), Some(8.0), Some(16.0), Some(32.0)].into_iter(),
+            auto2,
+            10,
+        )
+        .unwrap();
+        assert_eq!(
+            (log2.min, log2.max, log2.major, log2.log_base),
+            (1.0, 32.0, 2.0, Some(2.0)),
+            "official log2 auto used min=1 even when data min is 4"
         );
     }
 

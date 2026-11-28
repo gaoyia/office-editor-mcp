@@ -165,6 +165,10 @@ pub(super) struct LineSeriesStyle {
     pub(super) width: f64,
     pub(super) marker: MarkerKind,
     pub(super) marker_color: Option<[u8; 3]>,
+    /// Official-like series `c:smooth=1` (scatter, or a standard lineChart
+    /// series; scatterStyle smooth / smoothMarker when the flag is omitted).
+    /// Close-enough interpolating cubic; not a unique official-matrix lock.
+    pub(super) smooth: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -199,9 +203,66 @@ pub(super) struct Series {
     pub(super) error_points: Vec<bool>,
     pub(super) unavailable_points: Vec<bool>,
     pub(super) span_blanks: bool,
-    /// Official F21 secondary valAx: this series is in the second same-type
-    /// wrapper and is mapped with the secondary scale.
+    /// Official F21 secondary valAx: this series is in the second wrapper
+    /// and is mapped with the secondary scale.
     pub(super) on_secondary: bool,
+    /// Wrapper kind for this series. Same as the chart kind except the official
+    /// F21-8 column+line secondary combo, which paints each wrapper with its
+    /// own existing path. Not a general F26 combo lock.
+    pub(super) plot_kind: PlotKind,
+    /// Bubble sizes (c:bubbleSize). Empty for other kinds.
+    pub(super) bubble_sizes: Vec<Option<f64>>,
+    /// Official-like series smoothing. Close-enough interpolating cubic,
+    /// not a unique official-matrix or blank/endpoint lock.
+    pub(super) smooth: bool,
+    /// Official-like line/scatter dPt marker overrides, indexed by point.
+    /// Missing slots keep the series marker. Not a unique default-color lock.
+    pub(super) point_markers: Vec<Option<PointMarker>>,
+    /// Official-like linear trendline (no extension, no equation). Close-enough
+    /// least-squares stroke; not a unique official fit/style lock.
+    pub(super) trendline: Option<SeriesTrendline>,
+    /// Official-like y / fixedVal error bars. Close-enough stems and caps;
+    /// not a unique official cap/style table.
+    pub(super) err_bars: Option<SeriesErrBars>,
+    /// Straight OOXML area fill alpha. 255 for opaque / non-area series.
+    pub(super) fill_alpha: u8,
+    /// Official-like area `a:noFill`.
+    pub(super) area_no_fill: bool,
+    /// Official-like area `a:pattFill`. None for other series.
+    pub(super) area_pattern: Option<super::pattern::PatternFill>,
+}
+
+/// Per-point marker from an official-like line/scatter dPt.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) struct PointMarker {
+    pub(super) marker: MarkerKind,
+    pub(super) color: Option<[u8; 3]>,
+}
+
+/// Official-like trendline kinds currently accepted for export.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum TrendlineKind {
+    Linear,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct SeriesTrendline {
+    pub(super) kind: TrendlineKind,
+}
+
+/// Official-like error-bar direction from the data point.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ErrBarType {
+    Both,
+    Plus,
+    Minus,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct SeriesErrBars {
+    pub(super) typ: ErrBarType,
+    pub(super) fixed_val: f64,
+    pub(super) end_caps: bool,
 }
 
 impl Default for Series {
@@ -229,6 +290,15 @@ impl Default for Series {
             unavailable_points: Vec::new(),
             span_blanks: false,
             on_secondary: false,
+            plot_kind: PlotKind::ClusteredColumn,
+            bubble_sizes: Vec::new(),
+            smooth: false,
+            point_markers: Vec::new(),
+            trendline: None,
+            err_bars: None,
+            fill_alpha: 255,
+            area_no_fill: false,
+            area_pattern: None,
         }
     }
 }
@@ -245,8 +315,13 @@ pub(super) struct ColumnChart {
     pub(super) legend_spec: legend::Spec,
     pub(super) axis: axis::Spec,
     pub(super) axis_x: Option<axis::Spec>,
-    /// Official F21 secondary valAx (axPos=r, crosses=max). None for one axis.
+    /// Official F21 secondary valAx (column/line/area axPos=r, bar axPos=t,
+    /// crosses=max). None for one axis.
     pub(super) axis_secondary: Option<axis::Spec>,
+    /// Official F26-5: secondary valAx is on the right and the line is painted
+    /// in column orientation, while the primary remains a clustered bar.
+    /// Close-enough composition, not a general F26 combo lock.
+    pub(super) secondary_line_on_right: bool,
     pub(super) grid_x: bool,
     /// 条形图类目轴：minMax 时第一类在下，maxMin 时第一类在上。系列 0 落在该类目轴方向的槽起点。柱形/折线不用。
     pub(super) cats_from_bottom: bool,
@@ -275,6 +350,95 @@ pub(super) struct ColumnChart {
     /// missing cells / omitted cache points as 0 (a V to the baseline).
     /// Explicit dispBlanksAs=gap still leaves a hole. Unused for other kinds.
     pub(super) area_missing_as_zero: bool,
+    /// Official Excel 16 standard (and stacked) area valAx writes
+    /// crossBetween=midCat: first and last categories sit on the plot edges.
+    /// Unused for other kinds. The between path is unchanged.
+    pub(super) area_midcat: bool,
+    /// Close-enough 3D view (F24). None for 2D charts.
+    pub(super) view3d: Option<View3D>,
+    /// Which official 3D wrapper is being drawn. None for 2D charts.
+    pub(super) chart3d: Option<Chart3DKind>,
+    /// Doughnut hole as a percent of the outer diameter (ECMA default 50).
+    /// None for a solid pie.
+    pub(super) hole_size: Option<f64>,
+    /// Close-enough F25 other-type paint path. None for ordinary 2D/3D kinds.
+    pub(super) other: Option<OtherSpec>,
+    /// Official-like empty c:dropLines on a standard line or area chart.
+    /// Close-enough verticals to the axis crossing; not a unique style lock.
+    pub(super) drop_lines: bool,
+    /// Official-like empty c:hiLowLines on a standard line chart.
+    /// Close-enough min-to-max stems per category; not a unique style lock.
+    pub(super) hi_low_lines: bool,
+    /// Official-like empty c:upDownBars on a standard line chart.
+    pub(super) up_down_bars: bool,
+}
+
+/// Close-enough official-like F25 encodings. Not unique official-matrix locks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct OtherSpec {
+    pub(super) kind: OtherKind,
+    pub(super) of_pie_gap: f64,
+    pub(super) second_pie_size: f64,
+    pub(super) ser_lines: bool,
+    pub(super) split_last: usize,
+    pub(super) bubble_scale: f64,
+}
+
+impl Default for OtherSpec {
+    fn default() -> Self {
+        Self {
+            kind: OtherKind::Radar,
+            of_pie_gap: 150.0,
+            second_pie_size: 75.0,
+            ser_lines: false,
+            split_last: 3,
+            bubble_scale: 100.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum OtherKind {
+    OfPie,
+    Radar,
+    Bubble,
+    Stock,
+    SurfaceTop,
+}
+
+/// Close-enough 3D view parameters. Explicit XML values win; omitted
+/// children use ECMA-376 schema defaults and are not unique official
+/// render locks.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct View3D {
+    pub(super) rot_x: f64,
+    pub(super) rot_y: f64,
+    pub(super) right_angle_axes: bool,
+    pub(super) perspective: f64,
+    pub(super) depth_percent: f64,
+    pub(super) h_percent: f64,
+}
+
+impl Default for View3D {
+    fn default() -> Self {
+        Self {
+            rot_x: 0.0,
+            rot_y: 0.0,
+            right_angle_axes: true,
+            perspective: 30.0,
+            depth_percent: 100.0,
+            h_percent: 100.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Chart3DKind {
+    ColumnClustered,
+    Line,
+    Area,
+    Pie,
+    Surface,
 }
 
 /// Two integer-thousandth opacity operands retain their exact product until
@@ -284,12 +448,16 @@ pub(super) const ALPHA_PRODUCT_DENOM: u64 = 100_000 * 100_000;
 
 
 /// Supported frame styles are semantic fills and a round/rectangle switch.
-/// Pattern, blip, path/non-axis-aligned/multi-stop gradients, theme/system
-/// colors, transforms and custom strokes remain NI.
 /// Default (missing spPr) is white; explicit noFill is transparent; a solid
 /// srgbClr with alpha other than 100000 is straight translucency, not a
 /// flatten onto white.
-/// `Linear` uses an opaque sRGB stop table at the existing 0/90 degree geometry.
+/// `Linear` uses a stop table at the locked 0/90 geometry when that is what
+/// the XML asks for. Other angles, path shades, alpha/missing/duplicate
+/// stops, additional pattern presets, and blip tile/crop use documented
+/// close-enough rules so Office-exportable fills produce an image. Residuals
+/// stay on the review page; those rules are not unique official-matrix locks.
+/// Theme/system solid colors, unmeasured solid transforms and custom strokes
+/// still follow their existing parsers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum FrameFill {
     Default,
@@ -301,21 +469,44 @@ pub(super) enum FrameFill {
     /// Only nonintegral-percent, nonopaque new alphaMod inputs use this path.
     AlphaProduct([u8; 3], u64),
     Linear(LinearFrameGrad),
+    Pattern(super::pattern::PatternFill),
+    Blip(super::pattern::BlipFill),
     NoFill,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum PathShade {
+    Circle,
+    Rect,
+    Shape,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct LinearFrameGrad {
     pub(super) stops: gradient::StopTable,
-    /// DrawingML `a:lin/@ang` in 60000ths of a degree. Only 0 (left to right)
-    /// and 5_400_000 (top to bottom in y-down space) are locked.
+    /// DrawingML `a:lin/@ang` in 60000ths of a degree. 0 (left to right)
+    /// and 5_400_000 (top to bottom in y-down space) are the locked axis
+    /// cases. Other angles use a close-enough bbox-scaled projection.
     pub(super) ang: i64,
+    /// When set, `a:path` shade replaces the linear angle. Close-enough:
+    /// circle is a normalized ellipse from the center; rect/shape use a
+    /// Chebyshev (max-axis) radius. Not a unique official lock.
+    pub(super) path: Option<PathShade>,
+}
+
+impl LinearFrameGrad {
+    pub(super) fn is_axis_locked(&self) -> bool {
+        self.path.is_none()
+            && (self.ang == LINEAR_ANG_HORIZONTAL || self.ang == LINEAR_ANG_VERTICAL)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum PlotPaint {
     Solid([u8; 3], u8),
     Linear(LinearFrameGrad),
+    Pattern(super::pattern::PatternFill),
+    Blip(super::pattern::BlipFill),
 }
 
 pub(super) const LINEAR_ANG_HORIZONTAL: i64 = 0;
@@ -323,11 +514,34 @@ pub(super) const LINEAR_ANG_HORIZONTAL: i64 = 0;
 pub(super) const LINEAR_ANG_VERTICAL: i64 = 5_400_000;
 
 
+/// Visible chart or plot `a:ln`. Width stays in EMU and is converted at paint
+/// time. This is a close-enough export path, not a unique official lock.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct FrameLine {
+    pub(super) color: [u8; 3],
+    pub(super) alpha: u8,
+    pub(super) width_emu: f64,
+}
+
+/// Chart-area `a:outerShdw`. Dist/blur stay in EMU; `dir` is DrawingML
+/// 1/60000 degree. Close-enough export, not a unique official lock.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct OuterShadow {
+    pub(super) color: [u8; 3],
+    pub(super) alpha: u8,
+    pub(super) blur_emu: f64,
+    pub(super) dist_emu: f64,
+    pub(super) dir: i64,
+}
+
 pub(super) struct FrameStyle {
     pub(super) rounded: bool,
     pub(super) border: bool,
     pub(super) fill: FrameFill,
     pub(super) plot_fill: FrameFill,
+    pub(super) chart_line: Option<FrameLine>,
+    pub(super) plot_line: Option<FrameLine>,
+    pub(super) chart_shadow: Option<OuterShadow>,
 }
 
 pub(super) const OFFICE_GRAD_WEIGHT: [f64; 17] = [
@@ -355,14 +569,46 @@ pub(super) struct TitleTypo {
 pub(super) const PIE_HIDDEN_FILL_URI: &str = "{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}";
 
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct SliceFill {
     pub(super) color: [u8; 3],
     pub(super) alpha: u8,
+    /// Official-like two-stop linear `a:lin` sampled in the pie plot
+    /// square, not the F06 chart-frame rectangle. Close-enough; not a
+    /// unique official-matrix lock.
+    pub(super) linear: Option<LinearFrameGrad>,
+}
+
+impl SliceFill {
+    pub(super) fn solid(color: [u8; 3], alpha: u8) -> Self {
+        Self {
+            color,
+            alpha,
+            linear: None,
+        }
+    }
+
+    pub(super) fn from_linear(grad: LinearFrameGrad) -> Self {
+        let (color, alpha) = grad.sample_rgba(0.0);
+        Self {
+            color,
+            alpha,
+            linear: Some(grad),
+        }
+    }
 }
 
 pub(super) struct AreaSeriesStyle {
     pub(super) fill: Option<[u8; 3]>,
+    /// Straight OOXML alpha (100000 = opaque). 255 when the fill is opaque
+    /// or omitted. Not a unique official-matrix alpha lock.
+    pub(super) fill_alpha: u8,
+    /// Official-like series `a:noFill` (optional hiddenFill memory). The
+    /// area is not painted; the remembered solid is not a visible fill.
+    pub(super) no_fill: bool,
+    /// Official-like series `a:pattFill`. Sampled with the existing general
+    /// 8x8 / DPI pattern RULE inside the area polygon, not as a frame rect.
+    pub(super) pattern: Option<super::pattern::PatternFill>,
     pub(super) line_visible: bool,
     pub(super) line_width: f64,
     pub(super) line_color: Option<[u8; 3]>,

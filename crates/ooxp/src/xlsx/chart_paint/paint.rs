@@ -123,6 +123,15 @@ pub(super) fn paint_scatter(
         .title
         .as_ref()
         .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
+    let title_lines = title_lines_for(
+        chart.title.as_deref(),
+        font,
+        title_face.as_ref(),
+        gdi.as_ref(),
+        title_px,
+        canvas.w,
+        canvas.dpi,
+    );
     let em = text_height(font, label_px).max(gdi.as_ref().map_or(0.0, |f| f.em_box()));
     let y_scale = axis::scale(
         &chart.series,
@@ -144,19 +153,15 @@ pub(super) fn paint_scatter(
     let mut plot_x = axis_x + 1;
     let title_top = canvas.dpi.scale_f(4.0);
     let mut plot_y = if chart.title.is_some() {
-        let band = title_face
-            .as_ref()
-            .map(|face| face.em_box().ceil() as i32)
-            .unwrap_or_else(|| text_height(font, label_px).ceil() as i32);
-        let half = gdi
-            .as_ref()
-            .map(|face| face.line_height().ceil() as i32 / 2)
-            .unwrap_or(0);
-        let mut y = title_top as i32 + 2 * (band + half);
-        if matches!(host, ChartHost::Slide) {
-            y += canvas.dpi.scale_px(TITLE_DROP as i32);
-        }
-        y
+        titled_plot_y(
+            canvas.dpi,
+            host,
+            title_face.as_ref(),
+            gdi.as_ref(),
+            font,
+            label_px,
+            title_lines.len(),
+        )
     } else {
         scale_plot_leading(canvas.dpi, INSET_TOP)
     };
@@ -230,7 +235,7 @@ pub(super) fn paint_scatter(
             (plot.x + plot.w) as i32,
             (plot.y + plot.h) as i32,
             fill,
-        );
+        )?;
     }
     let y_regular = (((y_scale.max - y_scale.min) / y_scale.major).round() * y_scale.major
         - (y_scale.max - y_scale.min))
@@ -368,20 +373,9 @@ pub(super) fn paint_scatter(
             INK,
         );
     }
-    if let Some(title) = &chart.title {
+    if !title_lines.is_empty() {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, title_px);
-        let x = (f64::from(canvas.w) - width) / 2.0;
-        draw_text(
-            canvas,
-            font,
-            face,
-            title,
-            x,
-            title_top + canvas.dpi.scale_f(TITLE_DROP),
-            title_px,
-            INK,
-        );
+        draw_chart_title(canvas, font, face, &title_lines, title_px, title_top);
     }
     if chart.legend_spec.default_right_geometry() {
         let legend_plot_r = canvas.w as i32 - inset_right;
@@ -390,9 +384,7 @@ pub(super) fn paint_scatter(
         legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
-        if canvas.chart_border {
-            canvas.stroke_border(BORDER);
-        }
+        canvas.finish_excel_frame(Some(&plot));
     }
     Ok(())
 }
@@ -408,6 +400,59 @@ pub(super) fn x_of_dir(value: f64, axis_min: f64, axis_max: f64, plot: &Rect, re
         t = 1.0 - t;
     }
     plot.x + t * plot.w
+}
+
+
+fn stroke_points_for_smooth_run(run: &[(f64, f64)], smooth: bool) -> Vec<(f64, f64)> {
+    if smooth {
+        close_enough_smooth_run(run)
+    } else {
+        run.to_vec()
+    }
+}
+
+/// Close-enough interpolating cubic for official-like series `c:smooth=1`
+/// (scatter or standard line). Catmull-Rom converted to cubic Bezier
+/// (tension 0.5) with duplicated endpoints, sampled into a polyline.
+/// Official F28 gold supports a per-series rule on a standard lineChart
+/// (wrapper smooth=0); this is not a unique official-matrix lock and not
+/// a unique endpoint / blank contract.
+fn close_enough_smooth_run(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    const STEPS: usize = 24;
+    if points.len() < 3 {
+        return points.to_vec();
+    }
+    let n = points.len();
+    let mut out = Vec::with_capacity((n - 1) * STEPS + 1);
+    out.push(points[0]);
+    for i in 0..n - 1 {
+        let p0 = if i == 0 { points[0] } else { points[i - 1] };
+        let p1 = points[i];
+        let p2 = points[i + 1];
+        let p3 = if i + 2 < n { points[i + 2] } else { points[n - 1] };
+        let c1 = (
+            p1.0 + (p2.0 - p0.0) / 6.0,
+            p1.1 + (p2.1 - p0.1) / 6.0,
+        );
+        let c2 = (
+            p2.0 - (p3.0 - p1.0) / 6.0,
+            p2.1 - (p3.1 - p1.1) / 6.0,
+        );
+        for step in 1..=STEPS {
+            let t = step as f64 / STEPS as f64;
+            let u = 1.0 - t;
+            let x = u * u * u * p1.0
+                + 3.0 * u * u * t * c1.0
+                + 3.0 * u * t * t * c2.0
+                + t * t * t * p2.0;
+            let y = u * u * u * p1.1
+                + 3.0 * u * u * t * c1.1
+                + 3.0 * u * t * t * c2.1
+                + t * t * t * p2.1;
+            out.push((x, y));
+        }
+    }
+    out
 }
 
 pub(super) fn draw_scatter(
@@ -444,21 +489,68 @@ pub(super) fn draw_scatter(
                 }
                 _ => {
                     if ser.line_visible && ser.line_width > 0.0 {
-                        stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
+                        let pts = stroke_points_for_smooth_run(&run, ser.smooth);
+                        stroke_run_style(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
                     }
                     run.clear();
                 }
             }
         }
         if ser.line_visible && ser.line_width > 0.0 {
-            stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
+            let pts = stroke_points_for_smooth_run(&run, ser.smooth);
+            stroke_run_style(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
         }
-        if !matches!(ser.marker, MarkerKind::None) {
-            let marker_color = ser.marker_color.unwrap_or(color);
-            for (px, py) in points {
-                paint_marker(canvas, ser.marker, px, py, marker_color);
+        if series_has_any_marker(ser) {
+            let n_pts = ser.values.len().max(ser.x_values.len());
+            let mut pi = 0;
+            for i in 0..n_pts {
+                let x = ser.x_values.get(i).and_then(|v| *v);
+                let y = ser.values.get(i).and_then(|v| *v);
+                match (x, y) {
+                    (Some(x), Some(y)) if x.is_finite() && y.is_finite() => {
+                        let (px, py) = points[pi];
+                        pi += 1;
+                        let (marker, marker_color) = series_point_marker(ser, i);
+                        if !matches!(marker, MarkerKind::None) {
+                            paint_marker(
+                                canvas,
+                                marker,
+                                px,
+                                py,
+                                marker_color.unwrap_or(color),
+                            );
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
+        let mut samples = Vec::new();
+        let n_pts = ser.values.len().max(ser.x_values.len());
+        for i in 0..n_pts {
+            let x = ser.x_values.get(i).and_then(|v| *v);
+            let y = ser.values.get(i).and_then(|v| *v);
+            if let (Some(x), Some(y)) = (x, y) {
+                if x.is_finite() && y.is_finite() {
+                    let px = x_of(
+                        x.clamp(x_scale.min, x_scale.max),
+                        x_scale.min,
+                        x_scale.max,
+                        plot,
+                    );
+                    samples.push((x, y, px));
+                }
+            }
+        }
+        let y_at = |v: f64| {
+            y_of(
+                v.clamp(y_scale.min, y_scale.max),
+                y_scale.min,
+                y_scale.max,
+                plot,
+            )
+        };
+        draw_official_like_trendline_err_bars(canvas, ser, &samples, y_at);
     }
 }
 
@@ -476,6 +568,15 @@ pub(super) fn paint_bar(
         .title
         .as_ref()
         .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
+    let title_lines = title_lines_for(
+        chart.title.as_deref(),
+        font,
+        title_face.as_ref(),
+        gdi.as_ref(),
+        title_px,
+        canvas.w,
+        canvas.dpi,
+    );
     let em = text_height(font, label_px).max(gdi.as_ref().map_or(0.0, |f| f.em_box()));
     let widest_cat = chart
         .categories
@@ -491,29 +592,38 @@ pub(super) fn paint_bar(
     // axPos is still `b`. Unused gutters reuse INSET_TOP; the label side reuses
     // INSET_BOTTOM. This is not a guessed 1px shift.
     let val_axis_at_top = !chart.cats_from_bottom;
-    let val_deleted = chart.axis.deleted;
+    // tickLblPos=none releases the value-label gutter like delete=true, but
+    // the axis line is still drawn (official F20-5).
+    let val_labels = !chart.axis.deleted && !chart.axis.hide_tick_labels;
+    // Official F21-5 secondary valAx is at the top (axPos=t, crosses=max)
+    // while the primary stays at the bottom. Reserve both value-label gutters.
+    // Close-enough composition, not a unique official-matrix lock.
+    let sec_labels = chart
+        .axis_secondary
+        .as_ref()
+        .is_some_and(|spec| !spec.deleted && !spec.hide_tick_labels)
+        && !chart.secondary_line_on_right;
+    let need_top_val = (val_axis_at_top && val_labels) || sec_labels;
+    let need_bottom_val = !val_axis_at_top && val_labels;
     let val_label_top = scale_plot_leading(canvas.dpi, INSET_BOTTOM);
     let val_label_bottom = scale_plot_trailing(canvas.dpi, INSET_BOTTOM);
     let unused_top = scale_plot_leading(canvas.dpi, INSET_TOP);
     let unused_bottom = scale_plot_trailing(canvas.dpi, INSET_TOP);
     let mut plot_y = if chart.title.is_some() {
-        let band = title_face
-            .as_ref()
-            .map(|face| face.em_box().ceil() as i32)
-            .unwrap_or_else(|| text_height(font, label_px).ceil() as i32);
-        let half = gdi
-            .as_ref()
-            .map(|face| face.line_height().ceil() as i32 / 2)
-            .unwrap_or(0);
-        let mut y = title_top as i32 + 2 * (band + half);
-        if matches!(host, ChartHost::Slide) {
-            y += canvas.dpi.scale_px(TITLE_DROP as i32);
-        }
-        if val_axis_at_top && !val_deleted {
+        let mut y = titled_plot_y(
+            canvas.dpi,
+            host,
+            title_face.as_ref(),
+            gdi.as_ref(),
+            font,
+            label_px,
+            title_lines.len(),
+        );
+        if need_top_val {
             y += val_label_top;
         }
         y
-    } else if val_axis_at_top && !val_deleted {
+    } else if need_top_val {
         val_label_top
     } else {
         unused_top
@@ -521,10 +631,10 @@ pub(super) fn paint_bar(
     let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
     let mut plot_b = canvas.h as i32
-        - if val_axis_at_top || val_deleted {
-            unused_bottom
-        } else {
+        - if need_bottom_val {
             val_label_bottom
+        } else {
+            unused_bottom
         };
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
@@ -536,6 +646,52 @@ pub(super) fn paint_bar(
         if plot_r <= plot_x || plot_b <= plot_y {
             return Err(legend::unsupported());
         }
+    }
+    // Official F26-5 line-on-right secondary uses a vertical budget, then
+    // reserves the mirrored label column between the plot and the legend.
+    // Close-enough composition of the F21 right-axis gutter, not a unique lock.
+    let mixed_secondary_scale = if chart.secondary_line_on_right {
+        if let Some(spec) = chart.axis_secondary {
+            Some(axis::scale_values(
+                chart
+                    .series
+                    .iter()
+                    .filter(|ser| ser.on_secondary)
+                    .flat_map(|ser| ser.values.iter().copied()),
+                spec,
+                axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
+            )?)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let mut right_axis_x = plot_r;
+    if let Some(sec) = mixed_secondary_scale.as_ref() {
+        let labels: Vec<String> = tick_values(sec.min, sec.max, sec.major)
+            .into_iter()
+            .map(|v| fmt_tick_with(v, sec.tick_format))
+            .collect();
+        let widest = labels
+            .iter()
+            .map(|label| {
+                let width = text_width(font, gdi.as_ref(), label, label_px);
+                let hanging = if label.starts_with('-') {
+                    text_width(font, gdi.as_ref(), "-", label_px) / 2.0
+                } else {
+                    0.0
+                };
+                (width - hanging).ceil() as i32
+            })
+            .max()
+            .unwrap_or(0);
+        let gutter = widest + canvas.dpi.scale_px(TICK_GAP);
+        plot_r -= gutter;
+        if plot_r <= plot_x {
+            return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+        }
+        right_axis_x = plot_r;
     }
     let plot = Rect {
         x: f64::from(plot_x),
@@ -550,21 +706,62 @@ pub(super) fn paint_bar(
             (plot.x + plot.w) as i32,
             (plot.y + plot.h) as i32,
             fill,
-        );
+        )?;
     }
     // 数值轴在水平方向，间隔预算按绘图区宽度。占用系数用 1，与竖向数值轴同一套
     // 行盒口径，上限仍是 10。occupancy=3 是散点 X 轴为较长标签留的余量，在典型
     // 条形宽度下会把预算压到 9，从而把 Office 对 -8..8 的自动主间隔 2（-10..10
     // 共 10 格）拒掉，改成间隔 5。短数字标签在 10 格下仍放得下。
-    let scale = axis::scale(
-        &chart.series,
-        chart.axis,
-        axis::interval_budget_span(plot.w, em, 1.0),
-    )?;
+    let budget = axis::interval_budget_span(plot.w, em, 1.0);
+    let scale = if chart.axis_secondary.is_some() {
+        axis::scale_values(
+            chart
+                .series
+                .iter()
+                .filter(|ser| !ser.on_secondary)
+                .flat_map(|ser| ser.values.iter().copied()),
+            chart.axis,
+            budget,
+        )?
+    } else if chart.stacking == Stacking::Stacked {
+        axis::scale_values(
+            stacked_extent_values(&chart.series).into_iter(),
+            chart.axis,
+            budget,
+        )?
+    } else {
+        axis::scale(&chart.series, chart.axis, budget)?
+    };
+    let secondary_scale = if mixed_secondary_scale.is_some() {
+        mixed_secondary_scale
+    } else if let Some(spec) = chart.axis_secondary {
+        Some(axis::scale_values(
+            chart
+                .series
+                .iter()
+                .filter(|ser| ser.on_secondary)
+                .flat_map(|ser| ser.values.iter().copied()),
+            spec,
+            budget,
+        )?)
+    } else {
+        None
+    };
     let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
     let ticks = tick_values(axis_min, axis_max, step);
     let tick_labels: Vec<String> = ticks.iter().copied().map(|v| fmt_tick_with(v, scale.tick_format)).collect();
     let axis_y = if val_axis_at_top { plot_y } else { plot_b };
+    let (secondary_ticks, secondary_tick_labels) = if let Some(sec) = secondary_scale.as_ref() {
+        let ticks = tick_values(sec.min, sec.max, sec.major);
+        let labels: Vec<String> = ticks
+            .iter()
+            .copied()
+            .map(|v| fmt_tick_with(v, sec.tick_format))
+            .collect();
+        (ticks, labels)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     // 主刻度、网格与条右缘共用 x_of 四舍五入，避免整数 ceil 网格与条端错开 1px。
     if chart.grid {
         for value in &ticks {
@@ -590,7 +787,55 @@ pub(super) fn paint_bar(
     if scale.reversed && chart.series.iter().any(|s| s.value_label.is_some()) {
         return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
-    draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max, scale.reversed);
+    if let Some(sec) = secondary_scale.as_ref() {
+        if chart.secondary_line_on_right {
+            // Official F26-5: primary clustered bars, then a standard line in
+            // column orientation on the right valAx. Close-enough; not a
+            // general F26 combo lock.
+            draw_clustered_bars(
+                canvas,
+                chart,
+                &plot,
+                axis_min,
+                axis_max,
+                scale.reversed,
+                Some(false),
+            );
+            draw_lines(
+                canvas,
+                chart,
+                &plot,
+                sec.min,
+                sec.max,
+                sec.log_base,
+                sec.reversed,
+                Some(true),
+            )?;
+        } else {
+            // Official same-type secondary bars overlap in the same category
+            // slots: each wrapper is a one-series cluster. Paint primary first.
+            draw_clustered_bars(
+                canvas,
+                chart,
+                &plot,
+                axis_min,
+                axis_max,
+                scale.reversed,
+                Some(false),
+            );
+            draw_clustered_bars(
+                canvas,
+                chart,
+                &plot,
+                sec.min,
+                sec.max,
+                sec.reversed,
+                Some(true),
+            );
+        }
+    } else {
+        draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max, scale.reversed, None);
+    }
     draw_horizontal_value_labels(
         canvas,
         chart,
@@ -639,7 +884,7 @@ pub(super) fn paint_bar(
             INK,
         );
     }
-    if !scale.deleted {
+    if scale.value_labels_visible() {
         let tick_h = text_height(font, label_px);
         let label_top = if val_axis_at_top {
             f64::from(axis_y) - canvas.dpi.scale_f(10.0) - tick_h
@@ -661,20 +906,64 @@ pub(super) fn paint_bar(
             );
         }
     }
-    if let Some(title) = &chart.title {
+    if let Some(sec) = secondary_scale.as_ref() {
+        if chart.secondary_line_on_right {
+            canvas.vline_i(right_axis_x, plot_y, plot_b, INK);
+            if sec.value_labels_visible() {
+                draw_right_tick_labels(
+                    canvas,
+                    font,
+                    gdi.as_ref(),
+                    label_px,
+                    &plot,
+                    right_axis_x,
+                    &secondary_ticks,
+                    &secondary_tick_labels,
+                    sec.min,
+                    sec.max,
+                    sec.log_base,
+                    sec.reversed,
+                );
+            }
+        } else {
+        let top_y = plot_y;
+        canvas.hline_i(plot_x, plot_r, top_y, INK);
+        for value in tick_values(sec.min + sec.minor, sec.max, sec.minor) {
+            let at_major = (value - sec.min) / sec.major;
+            if (at_major - at_major.round()).abs() < 1e-8 {
+                continue;
+            }
+            let x = x_of_dir(value, sec.min, sec.max, &plot, sec.reversed).round() as i32;
+            canvas.vline_i(
+                x,
+                top_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                top_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                INK,
+            );
+        }
+        if sec.value_labels_visible() {
+            let tick_h = text_height(font, label_px);
+            let label_top = f64::from(top_y) - canvas.dpi.scale_f(10.0) - tick_h;
+            for (tick, label) in secondary_ticks.iter().zip(&secondary_tick_labels) {
+                let w = text_width(font, gdi.as_ref(), label, label_px);
+                let x = x_of_dir(*tick, sec.min, sec.max, &plot, sec.reversed) - w / 2.0;
+                draw_text(
+                    canvas,
+                    font,
+                    gdi.as_ref(),
+                    label,
+                    x,
+                    label_top,
+                    label_px,
+                    INK,
+                );
+            }
+        }
+        }
+    }
+    if !title_lines.is_empty() {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, title_px);
-        let x = (f64::from(canvas.w) - width) / 2.0;
-        draw_text(
-            canvas,
-            font,
-            face,
-            title,
-            x,
-            title_top + canvas.dpi.scale_f(TITLE_DROP),
-            title_px,
-            INK,
-        );
+        draw_chart_title(canvas, font, face, &title_lines, title_px, title_top);
     }
     if chart.legend_spec.default_right_geometry() {
         let legend_plot_r = canvas.w as i32 - inset_right;
@@ -683,9 +972,7 @@ pub(super) fn paint_bar(
         legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
-        if canvas.chart_border {
-            canvas.stroke_border(BORDER);
-        }
+        canvas.finish_excel_frame(Some(&plot));
     }
     Ok(())
 }
@@ -700,7 +987,13 @@ pub(super) fn paint_pie(
     if chart.series.len() != 1 {
         return Err(unsupported());
     }
-    if chart.legend.is_some() && !chart.legend_spec.default_right_ink() {
+    let standard_pie = chart.hole_size.is_none()
+        && chart.other.is_none()
+        && chart.chart3d.is_none();
+    if chart.legend.is_some()
+        && !(chart.legend_spec.default_right_ink()
+            || (standard_pie && chart.legend_spec.official_like_pie_auto_legend()))
+    {
         return Err(unsupported());
     }
     let label_px = canvas.dpi.pt_to_px_font(LABEL_PT) as f32;
@@ -710,6 +1003,15 @@ pub(super) fn paint_pie(
         .title
         .as_ref()
         .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
+    let title_lines = title_lines_for(
+        chart.title.as_deref(),
+        font,
+        title_face.as_ref(),
+        gdi.as_ref(),
+        title_px,
+        canvas.w,
+        canvas.dpi,
+    );
     let title_top = canvas.dpi.scale_f(4.0);
     // Public Office PlotArea probes: the pie is not an inscribed circle of
     // the whole host. Title and right legend bands are removed first; Office
@@ -718,15 +1020,18 @@ pub(super) fn paint_pie(
     // ChartTitle TextFrame2 has 3.6 pt top/bottom margins; reserve the
     // additional 6 pt title/plot separation. Font fallback can still differ
     // from the host theme and remains a separately reported layout residual.
-    let title_band = if chart.title.is_some() {
-        title_face
-            .as_ref()
-            .map_or_else(|| text_height(font, label_px), |face| face.em_box())
-            + canvas.dpi.pt_to_px_font(3.6 * 2.0 + 6.0)
-    } else {
-        0.0
-    };
-    let legend_band = if chart.legend == Some(LegendPos::Right) {
+    let title_band = pie_title_band(
+        canvas.dpi,
+        title_face.as_ref(),
+        font,
+        label_px,
+        title_lines.len(),
+    );
+    let side_legend = matches!(
+        chart.legend,
+        Some(LegendPos::Right | LegendPos::Left | LegendPos::TopRight)
+    );
+    let legend_band = if side_legend {
         let line = gdi
             .as_ref()
             .map_or_else(|| text_height(font, label_px), |face| face.em_box());
@@ -746,46 +1051,78 @@ pub(super) fn paint_pie(
     } else {
         0.0
     };
-    let plot = pie_plot_bounds(
+    // Horizontal-band height uses existing pie key/gap/pad tokens, not a
+    // Cartesian reserve and not a new official constant.
+    let horiz_band = if matches!(chart.legend, Some(LegendPos::Top | LegendPos::Bottom)) {
+        f64::from(
+            canvas.dpi.scale_px(LEGEND_SWATCH)
+                + canvas.dpi.scale_px(LEGEND_PLOT_GAP)
+                + canvas.dpi.scale_px(LEGEND_PAD),
+        )
+    } else {
+        0.0
+    };
+    let left_band = if chart.legend == Some(LegendPos::Left) {
+        legend_band
+    } else {
+        0.0
+    };
+    let right_band = if matches!(chart.legend, Some(LegendPos::Right | LegendPos::TopRight)) {
+        legend_band
+    } else {
+        0.0
+    };
+    let top_legend_band = if chart.legend == Some(LegendPos::Top) {
+        horiz_band
+    } else {
+        0.0
+    };
+    let bottom_band = if chart.legend == Some(LegendPos::Bottom) {
+        horiz_band
+    } else {
+        0.0
+    };
+    let plot = pie_plot_bounds_reserved(
         f64::from(canvas.w),
         f64::from(canvas.h),
         title_band,
-        legend_band,
+        left_band,
+        right_band,
+        top_legend_band,
+        bottom_band,
         canvas.dpi,
     )
     .ok_or_else(unsupported)?;
-    let inset_right = if chart.legend == Some(LegendPos::Right) {
+    let inset_right = if matches!(chart.legend, Some(LegendPos::Right | LegendPos::TopRight)) {
         pie_legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi)
     } else {
         canvas.dpi.scale_px(INSET_TOP)
     };
-    if let Some(PlotPaint::Solid(color, 255)) = canvas.plot_fill {
-        canvas.fill_fractional_rect(&plot, color);
+    if let Some(fill) = canvas.plot_fill.clone() {
+        canvas.paint_fractional_plot(&plot, fill)?;
     }
     draw_pie_slices(canvas, chart, &plot);
-    if let Some(title) = &chart.title {
+    if !title_lines.is_empty() {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, title_px);
-        let x = (f64::from(canvas.w) - width) / 2.0;
-        draw_text(
-            canvas,
-            font,
-            face,
-            title,
-            x,
-            title_top + canvas.dpi.scale_f(TITLE_DROP),
-            title_px,
-            INK,
-        );
+        draw_chart_title(canvas, font, face, &title_lines, title_px, title_top);
     }
     if chart.legend == Some(LegendPos::Right) {
         let legend_plot_r = canvas.w as i32 - inset_right;
         draw_pie_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
+    } else if let Some(pos) = chart.legend {
+        draw_pie_legend_pos(
+            canvas,
+            chart,
+            font,
+            gdi.as_ref(),
+            label_px,
+            pos,
+            &plot,
+            canvas.w as i32 - inset_right,
+        );
     }
     if matches!(host, ChartHost::Excel) {
-        if canvas.chart_border {
-            canvas.stroke_border(BORDER);
-        }
+        canvas.finish_excel_frame(Some(&plot));
     }
     Ok(())
 }
@@ -800,12 +1137,33 @@ pub(super) fn pie_plot_bounds(
     legend_band: f64,
     dpi: RenderDpi,
 ) -> Option<Rect> {
-    let available_width = width - legend_band;
-    let available_height = height - title_band;
+    // Existing right-band (or no-legend) contract: the band is taken from
+    // the right. Kept as a thin wrapper so locked PlotArea tests stay
+    // bit-identical.
+    pie_plot_bounds_reserved(width, height, title_band, 0.0, legend_band, 0.0, 0.0, dpi)
+}
+
+/// Pie square in a reserved rectangle. `pie_plot_bounds(w,h,title,right,dpi)`
+/// is exactly this with only `right_band` set. Left/top/bottom bands are the
+/// F39 close-enough reserves; they do not change the locked diameter
+/// formula, and they are not a unique five-position official lock or a
+/// new 0.875 guess.
+pub(super) fn pie_plot_bounds_reserved(
+    width: f64,
+    height: f64,
+    title_band: f64,
+    left_band: f64,
+    right_band: f64,
+    top_legend_band: f64,
+    bottom_band: f64,
+    dpi: RenderDpi,
+) -> Option<Rect> {
+    let available_width = width - left_band - right_band;
+    let available_height = height - title_band - top_legend_band - bottom_band;
     let diameter = available_width.min(available_height) * 0.875 - dpi.pt_to_px_font(22.0);
     (diameter > 1.0).then_some(Rect {
-        x: (available_width - diameter) / 2.0,
-        y: title_band + (available_height - diameter) / 2.0,
+        x: left_band + (available_width - diameter) / 2.0,
+        y: title_band + top_legend_band + (available_height - diameter) / 2.0,
         w: diameter,
         h: diameter,
     })
@@ -813,17 +1171,14 @@ pub(super) fn pie_plot_bounds(
 
 pub(super) fn pie_slice_fill(chart: &ColumnChart, index: usize) -> SliceFill {
     if let Some(Some(fill)) = chart.point_fills.get(index) {
-        return *fill;
+        return fill.clone();
     }
     // RGB cache of a non-noFill dPt override; point_fills already won above
     // when both are populated together.
     if let Some(Some(color)) = chart.point_colors.get(index) {
-        return SliceFill {
-            color: *color,
-            alpha: 255,
-        };
+        return SliceFill::solid(*color, 255);
     }
-    if let Some(fill) = chart.series_fill {
+    if let Some(fill) = chart.series_fill.clone() {
         return fill;
     }
     let color = if chart.vary_points {
@@ -833,7 +1188,7 @@ pub(super) fn pie_slice_fill(chart: &ColumnChart, index: usize) -> SliceFill {
             .color
             .unwrap_or(chart.accents[chart.series[0].slot % 6])
     };
-    SliceFill { color, alpha: 255 }
+    SliceFill::solid(color, 255)
 }
 
 pub(super) fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, SliceFill)> {
@@ -935,7 +1290,17 @@ pub(super) fn draw_pie_legend(
     let mut y = (title_band + canvas.h as i32 - block) / 2;
     let x = plot_r + canvas.dpi.scale_px(LEGEND_PLOT_GAP);
     for (name, fill) in items {
-        if fill.alpha > 0 {
+        if let Some(grad) = fill.linear.as_ref() {
+            // Close-enough key: the swatch's own rectangle, not the pie
+            // square and not a unique official legend-gradient lock.
+            canvas.fill_linear_rect(
+                x,
+                y,
+                x + canvas.dpi.scale_px(LEGEND_SWATCH),
+                y + canvas.dpi.scale_px(LEGEND_SWATCH),
+                grad,
+            );
+        } else if fill.alpha > 0 {
             canvas.fill_rect_cov(
                 x,
                 y,
@@ -957,6 +1322,106 @@ pub(super) fn draw_pie_legend(
             INK,
         );
         y += pitch;
+    }
+}
+
+fn paint_pie_legend_entry(
+    canvas: &mut Canvas,
+    font: Option<&Font>,
+    gdi: Option<&super::super::chart_gdi::Face>,
+    px: f32,
+    x: i32,
+    y: i32,
+    name: &str,
+    fill: &SliceFill,
+) {
+    let swatch = canvas.dpi.scale_px(LEGEND_SWATCH);
+    if let Some(grad) = fill.linear.as_ref() {
+        canvas.fill_linear_rect(x, y, x + swatch, y + swatch, grad);
+    } else if fill.alpha > 0 {
+        canvas.fill_rect_cov(x, y, x + swatch, y + swatch, fill.color, fill.alpha);
+    }
+    draw_text(
+        canvas,
+        font,
+        gdi,
+        name,
+        f64::from(x + swatch + legend_filled_key_gap(canvas.dpi)),
+        legend_filled_label_top(y, swatch, gdi, font, px),
+        px,
+        INK,
+    );
+}
+
+/// Close-enough l/t/b/tr pie legend. Right keeps `draw_pie_legend`.
+/// Keys stay LTR (label to the right of the swatch); left is a side
+/// reserve, not a mirrored key/text cluster. Top/bottom use the existing
+/// `LEGEND_PLOT_GAP` as the shared boundary with the pie square. TopRight
+/// reuses the right-band x and top-aligns with the pie square. Not a
+/// unique official-matrix lock and not a Cartesian reserve copy.
+pub(super) fn draw_pie_legend_pos(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    font: Option<&Font>,
+    gdi: Option<&super::super::chart_gdi::Face>,
+    px: f32,
+    pos: LegendPos,
+    plot: &Rect,
+    plot_r: i32,
+) {
+    if pos == LegendPos::Right {
+        draw_pie_legend(canvas, chart, font, gdi, px, plot_r);
+        return;
+    }
+    let items = pie_legend_items(chart);
+    let n = items.len() as i32;
+    if n == 0 {
+        return;
+    }
+    let pitch = canvas.dpi.scale_px(24);
+    let swatch = canvas.dpi.scale_px(LEGEND_SWATCH);
+    let gap = canvas.dpi.scale_px(LEGEND_PLOT_GAP);
+    let pad = canvas.dpi.scale_px(LEGEND_PAD);
+    let block = pitch * (n - 1) + swatch;
+    let title_band = if chart.title.is_some() {
+        canvas.dpi.scale_px(LEGEND_TITLE_BAND)
+    } else {
+        0
+    };
+    match pos {
+        LegendPos::Left => {
+            let mut y = (title_band + canvas.h as i32 - block) / 2;
+            let x = pad;
+            for (name, fill) in items {
+                paint_pie_legend_entry(canvas, font, gdi, px, x, y, &name, &fill);
+                y += pitch;
+            }
+        }
+        LegendPos::TopRight => {
+            let x = plot_r + gap;
+            let mut y = plot.y.round() as i32;
+            for (name, fill) in items {
+                paint_pie_legend_entry(canvas, font, gdi, px, x, y, &name, &fill);
+                y += pitch;
+            }
+        }
+        LegendPos::Top => {
+            let mut x = (canvas.w as i32 - block) / 2;
+            let y = plot.y.round() as i32 - gap - swatch;
+            for (name, fill) in items {
+                paint_pie_legend_entry(canvas, font, gdi, px, x, y, &name, &fill);
+                x += pitch;
+            }
+        }
+        LegendPos::Bottom => {
+            let mut x = (canvas.w as i32 - block) / 2;
+            let y = (plot.y + plot.h).round() as i32 + gap;
+            for (name, fill) in items {
+                paint_pie_legend_entry(canvas, font, gdi, px, x, y, &name, &fill);
+                x += pitch;
+            }
+        }
+        LegendPos::Right => {}
     }
 }
 
@@ -1017,8 +1482,30 @@ pub(super) fn draw_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, plot: &R
         let ox = cx + mid_rad.sin() * offset;
         let oy = cy - mid_rad.cos() * offset;
         let fill = pie_slice_fill(chart, index);
-        if fill.alpha > 0 {
-            canvas.fill_wedge(ox, oy, r_draw, start, end, fill.color, fill.alpha);
+        if let Some(grad) = fill.linear.as_ref() {
+            // Sample in the existing pie plot square (the diameter box after
+            // title/legend reserve), not the F06 chart-frame rectangle and
+            // not a per-wedge rotated local box. Official F38 gold is one
+            // linear field over that pie square.
+            if let Some(hole) = chart.hole_size {
+                let inner = r_draw * (hole / 100.0).clamp(0.05, 0.95);
+                canvas.fill_ring_wedge_linear(
+                    ox, oy, inner, r_draw, start, end, grad, plot.x, plot.y, plot.w, plot.h,
+                );
+            } else {
+                canvas.fill_wedge_linear(
+                    ox, oy, r_draw, start, end, grad, plot.x, plot.y, plot.w, plot.h,
+                );
+            }
+        } else if fill.alpha > 0 {
+            if let Some(hole) = chart.hole_size {
+                let inner = r_draw * (hole / 100.0).clamp(0.05, 0.95);
+                canvas.fill_ring_wedge(
+                    ox, oy, inner, r_draw, start, end, fill.color, fill.alpha,
+                );
+            } else {
+                canvas.fill_wedge(ox, oy, r_draw, start, end, fill.color, fill.alpha);
+            }
         }
         start = end;
     }
@@ -1030,6 +1517,18 @@ pub(super) fn paint(
     font: Option<&Font>,
     host: ChartHost,
 ) -> Result<(), Error> {
+    if chart.chart3d.is_some() {
+        return paint_3d(canvas, chart, font, host);
+    }
+    if let Some(spec) = chart.other.as_ref() {
+        return match spec.kind {
+            OtherKind::OfPie => paint_of_pie(canvas, chart, font, host),
+            OtherKind::Radar => paint_radar(canvas, chart, font, host),
+            OtherKind::Bubble => paint_bubble(canvas, chart, font, host),
+            OtherKind::Stock => paint_stock(canvas, chart, font, host),
+            OtherKind::SurfaceTop => paint_surface_top(canvas, chart, font, host),
+        };
+    }
     if matches!(chart.kind, PlotKind::Scatter { .. }) {
         return paint_scatter(canvas, chart, font, host);
     }
@@ -1047,6 +1546,15 @@ pub(super) fn paint(
         .title
         .as_ref()
         .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
+    let title_lines = title_lines_for(
+        chart.title.as_deref(),
+        font,
+        title_face.as_ref(),
+        gdi.as_ref(),
+        title_px,
+        canvas.w,
+        canvas.dpi,
+    );
     // Use the full supplied font line box, not just the GDI raster ascent.
     // Glyph drawing can use the existing GDI fallback; label packing must reserve
     // the larger declared line box so the two paths cannot over-pack the axis.
@@ -1062,6 +1570,16 @@ pub(super) fn paint(
             chart.axis,
             budget,
         )?
+    } else if chart.stacking == Stacking::Stacked {
+        let extents = if matches!(
+            chart.kind,
+            PlotKind::StandardLine | PlotKind::StandardArea
+        ) {
+            cumulative_extent_values(&chart.series)
+        } else {
+            stacked_extent_values(&chart.series)
+        };
+        axis::scale_values(extents.into_iter(), chart.axis, budget)?
     } else {
         axis::scale(&chart.series, chart.axis, budget)?
     };
@@ -1087,9 +1605,10 @@ pub(super) fn paint(
     };
     let tick_labels: Vec<String> = ticks.iter().copied().map(|v| fmt_tick_with(v, scale.tick_format)).collect();
     let intervals = ticks.len().saturating_sub(1).max(1) as i32;
-    let widest_tick = if scale.deleted {
-        // Official valAx delete=true releases the value-label gutter; the
-        // axis line and tick labels are omitted. This is not a 1px fudge.
+    let widest_tick = if !scale.value_labels_visible() {
+        // Official valAx delete=true and tickLblPos=none both release the
+        // value-label gutter. delete=true also omits the axis line;
+        // tickLblPos=none keeps it. This is not a 1px fudge.
         0
     } else {
         tick_labels
@@ -1206,7 +1725,7 @@ pub(super) fn paint(
             (plot.x + plot.w) as i32,
             (plot.y + plot.h) as i32,
             fill,
-        );
+        )?;
     }
     let regular = log_base.is_some()
         || (((axis_max - axis_min) / step).round() * step - (axis_max - axis_min)).abs()
@@ -1280,20 +1799,42 @@ pub(super) fn paint(
                     Some(false),
                 );
                 let sec = secondary_scale.as_ref().unwrap();
-                draw_bars(
-                    canvas,
-                    chart,
-                    &plot,
-                    sec.min,
-                    sec.max,
-                    sec.major,
-                    sec.log_base,
-                    sec.crossing(),
-                    sec.reversed,
-                    Some(true),
-                );
+                let sec_kind = chart
+                    .series
+                    .iter()
+                    .find(|ser| ser.on_secondary)
+                    .map(|ser| ser.plot_kind)
+                    .unwrap_or(PlotKind::ClusteredColumn);
+                // Official F21-8 paints the column on the primary scale and
+                // the line on the secondary scale. Close-enough; not a general
+                // F26 combo lock. Do not paint only one series.
+                if sec_kind == PlotKind::StandardLine {
+                    draw_lines(
+                        canvas,
+                        chart,
+                        &plot,
+                        sec.min,
+                        sec.max,
+                        sec.log_base,
+                        sec.reversed,
+                        Some(true),
+                    )?;
+                } else {
+                    draw_bars(
+                        canvas,
+                        chart,
+                        &plot,
+                        sec.min,
+                        sec.max,
+                        sec.major,
+                        sec.log_base,
+                        sec.crossing(),
+                        sec.reversed,
+                        Some(true),
+                    );
+                }
             } else {
-                draw_bars(
+                paint_combo_layers(
                     canvas,
                     chart,
                     &plot,
@@ -1304,11 +1845,22 @@ pub(super) fn paint(
                     scale.crossing(),
                     scale.reversed,
                     None,
-                );
+                )?;
             }
         }
         PlotKind::StandardLine => {
             if let Some(sec) = secondary_scale.as_ref() {
+                draw_official_like_drop_hi_low_up_down(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    log_base,
+                    scale.crossing(),
+                    scale.reversed,
+                    Some(false),
+                );
                 draw_lines(
                     canvas,
                     chart,
@@ -1319,6 +1871,17 @@ pub(super) fn paint(
                     scale.reversed,
                     Some(false),
                 )?;
+                draw_official_like_drop_hi_low_up_down(
+                    canvas,
+                    chart,
+                    &plot,
+                    sec.min,
+                    sec.max,
+                    sec.log_base,
+                    sec.crossing(),
+                    sec.reversed,
+                    Some(true),
+                );
                 draw_lines(
                     canvas,
                     chart,
@@ -1330,18 +1893,57 @@ pub(super) fn paint(
                     Some(true),
                 )?;
             } else {
+                draw_official_like_drop_hi_low_up_down(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    log_base,
+                    scale.crossing(),
+                    scale.reversed,
+                    None,
+                );
                 draw_lines(canvas, chart, &plot, axis_min, axis_max, log_base, scale.reversed, None)?;
             }
         }
-        PlotKind::StandardArea => draw_areas(
-            canvas,
-            chart,
-            &plot,
-            axis_min,
-            axis_max,
-            scale.crossing(),
-            scale.reversed,
-        ),
+        PlotKind::StandardArea => {
+            if let Some(sec) = secondary_scale.as_ref() {
+                draw_areas(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    scale.crossing(),
+                    scale.reversed,
+                    Some(false),
+                );
+                draw_areas(
+                    canvas,
+                    chart,
+                    &plot,
+                    sec.min,
+                    sec.max,
+                    sec.crossing(),
+                    sec.reversed,
+                    Some(true),
+                );
+            } else {
+                paint_combo_layers(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    step,
+                    log_base,
+                    scale.crossing(),
+                    scale.reversed,
+                    None,
+                )?;
+            }
+        }
         PlotKind::ClusteredBar | PlotKind::Pie | PlotKind::Scatter { .. } => {
             unreachable!("bar/pie/scatter charts use dedicated paint")
         }
@@ -1389,7 +1991,7 @@ pub(super) fn paint(
         log_base,
         scale.category_labels_above(),
         scale.reversed,
-        !scale.deleted,
+        scale.value_labels_visible(),
     );
     if let Some(sec) = secondary_scale.as_ref() {
         canvas.vline_i(right_axis_x, plot_y, plot_b, INK);
@@ -1408,20 +2010,9 @@ pub(super) fn paint(
             sec.reversed,
         );
     }
-    if let Some(title) = &chart.title {
+    if !title_lines.is_empty() {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, title_px);
-        let x = (f64::from(canvas.w) - width) / 2.0;
-        draw_text(
-            canvas,
-            font,
-            face,
-            title,
-            x,
-            title_top + canvas.dpi.scale_f(TITLE_DROP),
-            title_px,
-            INK,
-        );
+        draw_chart_title(canvas, font, face, &title_lines, title_px, title_top);
     }
     if chart.legend_spec.default_right_geometry() {
         // An overlay must release plot space without changing the default legend.
@@ -1432,9 +2023,7 @@ pub(super) fn paint(
         legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
-        if canvas.chart_border {
-            canvas.stroke_border(BORDER);
-        }
+        canvas.finish_excel_frame(Some(&plot));
     }
     Ok(())
 }
@@ -1514,6 +2103,376 @@ pub(super) fn draw_value_minor_ticks(
     }
 }
 
+/// Close-enough official-like empty dropLines, hiLowLines, and upDownBars.
+/// Geometry follows the OOXML meanings: drop to the axis crossing, high-low
+/// between the category min and max, up/down bars between the first and last
+/// series with the existing single-column gapWidth formula. Empty elements
+/// reuse axis INK for strokes and a close-enough light/dark fill for bars;
+/// this is not a unique official-matrix color or width lock.
+/// Close-enough official-like linear trendline and y/fixedVal error bars.
+/// Ink is the existing axis INK; width is the same 1px stroke as F31 empty
+/// decorations. Cap half-width is a short close-enough tick, not a unique
+/// official cap-length lock. Domain is the finite data domain (no forward
+/// or backward extension).
+fn draw_official_like_trendline_err_bars(
+    canvas: &mut Canvas,
+    ser: &Series,
+    samples: &[(f64, f64, f64)],
+    y_at: impl Fn(f64) -> f64,
+) {
+    const STROKE_W: f64 = 1.0;
+    // Close-enough cap half-width in pixels, not a unique official lock.
+    const CAP_HALF: f64 = 2.0;
+    if let Some(trend) = ser.trendline {
+        if matches!(trend.kind, TrendlineKind::Linear) {
+            draw_official_like_linear_trendline(canvas, samples, &y_at, STROKE_W);
+        }
+    }
+    if let Some(bars) = ser.err_bars {
+        for &(_, y, cx) in samples {
+            let plus = y + bars.fixed_val;
+            let minus = y - bars.fixed_val;
+            let (y_hi, y_lo) = match bars.typ {
+                ErrBarType::Both => (plus, minus),
+                ErrBarType::Plus => (plus, y),
+                ErrBarType::Minus => (y, minus),
+            };
+            let cy1 = y_at(y_hi);
+            let cy2 = y_at(y_lo);
+            canvas.stroke_segment(cx, cy1, cx, cy2, STROKE_W, INK);
+            if bars.end_caps {
+                if !matches!(bars.typ, ErrBarType::Minus) {
+                    canvas.stroke_segment(cx - CAP_HALF, cy1, cx + CAP_HALF, cy1, STROKE_W, INK);
+                }
+                if !matches!(bars.typ, ErrBarType::Plus) {
+                    canvas.stroke_segment(cx - CAP_HALF, cy2, cx + CAP_HALF, cy2, STROKE_W, INK);
+                }
+            }
+        }
+    }
+}
+
+fn draw_official_like_linear_trendline(
+    canvas: &mut Canvas,
+    samples: &[(f64, f64, f64)],
+    y_at: &impl Fn(f64) -> f64,
+    stroke_w: f64,
+) {
+    let pts: Vec<(f64, f64)> = samples
+        .iter()
+        .filter(|(x, y, _)| x.is_finite() && y.is_finite())
+        .map(|(x, y, _)| (*x, *y))
+        .collect();
+    if pts.len() < 2 {
+        return;
+    }
+    let n = pts.len() as f64;
+    let sum_x: f64 = pts.iter().map(|p| p.0).sum();
+    let sum_y: f64 = pts.iter().map(|p| p.1).sum();
+    let sum_xx: f64 = pts.iter().map(|p| p.0 * p.0).sum();
+    let sum_xy: f64 = pts.iter().map(|p| p.0 * p.1).sum();
+    let denom = n * sum_xx - sum_x * sum_x;
+    if denom.abs() < 1e-12 {
+        return;
+    }
+    let slope = (n * sum_xy - sum_x * sum_y) / denom;
+    let intercept = (sum_y - slope * sum_x) / n;
+    let x0 = pts.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+    let x1 = pts.iter().map(|p| p.0).fold(f64::NEG_INFINITY, f64::max);
+    if !x0.is_finite() || !x1.is_finite() || (x1 - x0).abs() < 1e-12 {
+        return;
+    }
+    let Some(left) = samples
+        .iter()
+        .filter(|(x, _, _)| x.is_finite())
+        .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+    else {
+        return;
+    };
+    let Some(right) = samples
+        .iter()
+        .filter(|(x, _, _)| x.is_finite())
+        .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+    else {
+        return;
+    };
+    if (right.0 - left.0).abs() < 1e-12 {
+        return;
+    }
+    let cx = |x: f64| left.2 + (x - left.0) / (right.0 - left.0) * (right.2 - left.2);
+    let y0 = intercept + slope * x0;
+    let y1 = intercept + slope * x1;
+    canvas.stroke_segment(cx(x0), y_at(y0), cx(x1), y_at(y1), stroke_w, INK);
+}
+
+fn series_point_marker(ser: &Series, index: usize) -> (MarkerKind, Option<[u8; 3]>) {
+    if let Some(Some(point)) = ser.point_markers.get(index) {
+        (point.marker, point.color)
+    } else {
+        (ser.marker, ser.marker_color)
+    }
+}
+
+fn series_has_any_marker(ser: &Series) -> bool {
+    !matches!(ser.marker, MarkerKind::None)
+        || ser.point_markers.iter().any(|point| {
+            point
+                .as_ref()
+                .is_some_and(|m| !matches!(m.marker, MarkerKind::None))
+        })
+}
+
+fn draw_official_like_drop_hi_low_up_down(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    log_base: Option<f64>,
+    origin: f64,
+    reversed: bool,
+    group_secondary: Option<bool>,
+) {
+    if !chart.drop_lines && !chart.hi_low_lines && !chart.up_down_bars {
+        return;
+    }
+    let group: Vec<&Series> = chart
+        .series
+        .iter()
+        .filter(|ser| {
+            matches!(
+                ser.plot_kind,
+                PlotKind::StandardLine | PlotKind::StandardArea
+            ) && !ser.values.is_empty()
+                && group_secondary
+                    .map(|flag| ser.on_secondary == flag)
+                    .unwrap_or(true)
+        })
+        .collect();
+    if group.is_empty() {
+        return;
+    }
+    let cats = chart
+        .categories
+        .len()
+        .max(
+            group
+                .iter()
+                .map(|ser| ser.values.len())
+                .max()
+                .unwrap_or(0),
+        )
+        .max(1);
+    let cats_f = cats as f64;
+    let slot = (plot.w + 1.0) / cats_f;
+    if slot <= 0.0 {
+        return;
+    }
+    let midcat = chart.area_midcat
+        && group
+            .iter()
+            .any(|ser| ser.plot_kind == PlotKind::StandardArea)
+        && group
+            .iter()
+            .all(|ser| ser.plot_kind != PlotKind::StandardLine);
+    let x_at = |ci: usize| -> f64 {
+        if midcat {
+            category_x_midcat(plot, ci, cats_f)
+        } else {
+            plot.x + slot * (ci as f64 + 0.5)
+        }
+    };
+    let y_at = |v: f64| {
+        y_map(
+            v.clamp(axis_min, axis_max),
+            axis_min,
+            axis_max,
+            plot,
+            log_base,
+            reversed,
+        )
+    };
+    let y_axis = y_map(
+        origin.clamp(axis_min, axis_max),
+        axis_min,
+        axis_max,
+        plot,
+        log_base,
+        reversed,
+    );
+    let stroke_w = 1.0;
+    // Close-enough default fills for empty upBars/downBars, not a unique RGB lock.
+    const UP_BAR_FILL: [u8; 3] = [255, 255, 255];
+    const DOWN_BAR_FILL: [u8; 3] = [0, 0, 0];
+    if chart.up_down_bars && group.len() >= 2 {
+        let first = group[0];
+        let last = group[group.len() - 1];
+        let bar_w = slot / (1.0 + chart.gap_width / 100.0);
+        for ci in 0..cats {
+            let Some(va) = first
+                .values
+                .get(ci)
+                .copied()
+                .flatten()
+                .filter(|n| n.is_finite())
+            else {
+                continue;
+            };
+            let Some(vb) = last
+                .values
+                .get(ci)
+                .copied()
+                .flatten()
+                .filter(|n| n.is_finite())
+            else {
+                continue;
+            };
+            if (va - vb).abs() <= 1e-12 {
+                continue;
+            }
+            let x = x_at(ci);
+            let y1 = y_at(va);
+            let y2 = y_at(vb);
+            let top = y1.min(y2);
+            let bot = y1.max(y2);
+            let left = x - bar_w / 2.0;
+            let right = left + bar_w;
+            let fill = if vb > va { UP_BAR_FILL } else { DOWN_BAR_FILL };
+            canvas.fill_rect(
+                left.round() as i32,
+                top.round() as i32,
+                right.round() as i32,
+                bot.round() as i32,
+                fill,
+            );
+            canvas.stroke_segment(left, top, right, top, stroke_w, INK);
+            canvas.stroke_segment(right, top, right, bot, stroke_w, INK);
+            canvas.stroke_segment(right, bot, left, bot, stroke_w, INK);
+            canvas.stroke_segment(left, bot, left, top, stroke_w, INK);
+        }
+    }
+    if chart.hi_low_lines {
+        for ci in 0..cats {
+            let mut lo = None;
+            let mut hi = None;
+            for ser in &group {
+                if let Some(v) = ser
+                    .values
+                    .get(ci)
+                    .copied()
+                    .flatten()
+                    .filter(|n| n.is_finite())
+                {
+                    lo = Some(lo.map_or(v, |m: f64| m.min(v)));
+                    hi = Some(hi.map_or(v, |m: f64| m.max(v)));
+                }
+            }
+            if let (Some(lo), Some(hi)) = (lo, hi) {
+                if (hi - lo).abs() > 1e-12 {
+                    let x = x_at(ci);
+                    canvas.stroke_segment(x, y_at(hi), x, y_at(lo), stroke_w, INK);
+                }
+            }
+        }
+    }
+    if chart.drop_lines {
+        for ser in &group {
+            for (ci, value) in ser.values.iter().enumerate() {
+                let Some(v) = value.filter(|n| n.is_finite()) else {
+                    continue;
+                };
+                let x = x_at(ci);
+                canvas.stroke_segment(x, y_at(v), x, y_axis, stroke_w, INK);
+            }
+        }
+    }
+}
+
+/// Official-like F26 shared-primary combos paint already-locked paths in
+/// official back-to-front order: area, then columns, then lines. Cluster
+/// width follows only the column series. Close-enough; not a general
+/// heterogeneous-combo lock. Plain single-kind charts take the same path.
+fn paint_combo_layers(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    step: f64,
+    log_base: Option<f64>,
+    origin: f64,
+    reversed: bool,
+    group_secondary: Option<bool>,
+) -> Result<(), Error> {
+    let in_group = |ser: &Series| {
+        group_secondary
+            .map(|flag| ser.on_secondary == flag)
+            .unwrap_or(true)
+    };
+    if chart
+        .series
+        .iter()
+        .any(|ser| ser.plot_kind == PlotKind::StandardArea && in_group(ser))
+    {
+        draw_areas(
+            canvas,
+            chart,
+            plot,
+            axis_min,
+            axis_max,
+            origin,
+            reversed,
+            group_secondary,
+        );
+    }
+    if chart
+        .series
+        .iter()
+        .any(|ser| ser.plot_kind == PlotKind::ClusteredColumn && in_group(ser))
+    {
+        draw_bars(
+            canvas,
+            chart,
+            plot,
+            axis_min,
+            axis_max,
+            step,
+            log_base,
+            origin,
+            reversed,
+            group_secondary,
+        );
+    }
+    draw_official_like_drop_hi_low_up_down(
+        canvas,
+        chart,
+        plot,
+        axis_min,
+        axis_max,
+        log_base,
+        origin,
+        reversed,
+        group_secondary,
+    );
+    if chart
+        .series
+        .iter()
+        .any(|ser| ser.plot_kind == PlotKind::StandardLine && in_group(ser))
+    {
+        draw_lines(
+            canvas,
+            chart,
+            plot,
+            axis_min,
+            axis_max,
+            log_base,
+            reversed,
+            group_secondary,
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) fn draw_lines(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -1534,7 +2493,7 @@ pub(super) fn draw_lines(
     let group: Vec<&Series> = chart
         .series
         .iter()
-        .filter(|ser| !ser.values.is_empty())
+        .filter(|ser| !ser.values.is_empty() && ser.plot_kind == PlotKind::StandardLine)
         .collect();
     for (si, ser) in group.iter().enumerate() {
         if !group_secondary
@@ -1561,7 +2520,8 @@ pub(super) fn draw_lines(
                 {
                     None
                 } else {
-                    stroke_run_pattern_join(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
+                    let pts = stroke_points_for_smooth_run(&run, ser.smooth);
+                    stroke_run_pattern_join(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
                     run.clear();
                     None
                 };
@@ -1569,10 +2529,10 @@ pub(super) fn draw_lines(
                     run.push(line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed));
                 }
             }
-            stroke_run_pattern_join(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
+            let pts = stroke_points_for_smooth_run(&run, ser.smooth);
+            stroke_run_pattern_join(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
         }
-        if !matches!(ser.marker, MarkerKind::None) {
-            let marker_color = ser.marker_color.unwrap_or(color);
+        if series_has_any_marker(ser) {
             for (ci, value) in ser.values.iter().enumerate() {
                 let plotted = if stacked {
                     stack_cumulative(&group, ci, si, percent).map(|(_, end)| end)
@@ -1582,9 +2542,34 @@ pub(super) fn draw_lines(
                 let Some(v) = plotted else {
                     continue;
                 };
+                let (marker, marker_color) = series_point_marker(ser, ci);
+                if matches!(marker, MarkerKind::None) {
+                    continue;
+                }
                 let (x, y) = line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed);
-                paint_marker(canvas, ser.marker, x, y, marker_color);
+                paint_marker(canvas, marker, x, y, marker_color.unwrap_or(color));
             }
+        }
+        if !stacked {
+            let mut samples = Vec::new();
+            for (ci, value) in ser.values.iter().enumerate() {
+                let Some(v) = value.filter(|n| n.is_finite()) else {
+                    continue;
+                };
+                let (x, _) = line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed);
+                samples.push((ci as f64, v, x));
+            }
+            let y_at = |v: f64| {
+                y_map(
+                    v.clamp(axis_min, axis_max),
+                    axis_min,
+                    axis_max,
+                    plot,
+                    log_base,
+                    reversed,
+                )
+            };
+            draw_official_like_trendline_err_bars(canvas, ser, &samples, y_at);
         }
     }
     Ok(())
@@ -1610,6 +2595,37 @@ pub(super) fn line_point(
         reversed,
     );
     (x, y)
+}
+
+/// Standard area vertices: midCat puts first/last categories on the plot
+/// edges (same formula as stacked area). The between path keeps the
+/// half-slot line/column formula. Close-enough reuse of the existing
+/// midCat rule, not a new unique lock.
+fn area_vertex(
+    value: f64,
+    ci: usize,
+    slot: f64,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    reversed: bool,
+    midcat: bool,
+    cats: f64,
+) -> (f64, f64) {
+    if midcat {
+        let x = category_x_midcat(plot, ci, cats);
+        let y = y_map(
+            value.clamp(axis_min, axis_max),
+            axis_min,
+            axis_max,
+            plot,
+            None,
+            reversed,
+        );
+        (x, y)
+    } else {
+        line_point(value, ci, slot, plot, axis_min, axis_max, None, reversed)
+    }
 }
 
 pub(super) fn stroke_run(canvas: &mut Canvas, run: &[(f64, f64)], width: f64, color: [u8; 3]) {
@@ -1698,6 +2714,7 @@ pub(super) fn draw_areas(
     axis_max: f64,
     origin: f64,
     reversed: bool,
+    group_secondary: Option<bool>,
 ) {
     let cats = chart.categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
@@ -1710,19 +2727,33 @@ pub(super) fn draw_areas(
         return;
     }
     for ser in &chart.series {
+        if ser.plot_kind != PlotKind::StandardArea {
+            continue;
+        }
+        if !group_secondary
+            .map(|flag| ser.on_secondary == flag)
+            .unwrap_or(true)
+        {
+            continue;
+        }
         let fill = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         let stroke = ser.line_color.unwrap_or(fill);
+        let paint = area_band_paint(ser, fill);
         let mut run = Vec::new();
         for (ci, value) in ser.values.iter().enumerate() {
             match value {
                 Some(v) if v.is_finite() => {
-                    run.push(line_point(*v, ci, slot, plot, axis_min, axis_max, None, reversed));
+                    run.push(area_vertex(
+                        *v, ci, slot, plot, axis_min, axis_max, reversed, chart.area_midcat, cats,
+                    ));
                 }
                 None if chart.area_missing_as_zero => {
-                    run.push(line_point(0.0, ci, slot, plot, axis_min, axis_max, None, reversed));
+                    run.push(area_vertex(
+                        0.0, ci, slot, plot, axis_min, axis_max, reversed, chart.area_midcat, cats,
+                    ));
                 }
                 _ => {
-                    fill_area_run(canvas, &run, zero_y, fill);
+                    fill_area_run_paint(canvas, &run, zero_y, paint);
                     if ser.line_visible && ser.line_width > 0.0 {
                         stroke_run(canvas, &run, ser.line_width, stroke);
                     }
@@ -1730,10 +2761,31 @@ pub(super) fn draw_areas(
                 }
             }
         }
-        fill_area_run(canvas, &run, zero_y, fill);
+        fill_area_run_paint(canvas, &run, zero_y, paint);
         if ser.line_visible && ser.line_width > 0.0 {
             stroke_run(canvas, &run, ser.line_width, stroke);
         }
+        let mut samples = Vec::new();
+        for (ci, value) in ser.values.iter().enumerate() {
+            let Some(v) = value.filter(|n| n.is_finite()) else {
+                continue;
+            };
+            let (x, _) = area_vertex(
+                v, ci, slot, plot, axis_min, axis_max, reversed, chart.area_midcat, cats,
+            );
+            samples.push((ci as f64, v, x));
+        }
+        let y_at = |v: f64| {
+            y_map(
+                v.clamp(axis_min, axis_max),
+                axis_min,
+                axis_max,
+                plot,
+                None,
+                reversed,
+            )
+        };
+        draw_official_like_trendline_err_bars(canvas, ser, &samples, y_at);
     }
 }
 
@@ -1802,20 +2854,25 @@ pub(super) fn category_x_midcat(plot: &Rect, ci: usize, cats: f64) -> f64 {
     }
 }
 
-pub(super) fn fill_area_run(canvas: &mut Canvas, run: &[(f64, f64)], zero_y: f64, color: [u8; 3]) {
+fn fill_area_run_paint(
+    canvas: &mut Canvas,
+    run: &[(f64, f64)],
+    zero_y: f64,
+    paint: AreaBandPaint<'_>,
+) {
     for pair in run.windows(2) {
-        fill_area_span(canvas, pair[0], pair[1], zero_y, color);
+        fill_area_span_paint(canvas, pair[0], pair[1], zero_y, paint);
     }
 }
 
-pub(super) fn fill_area_span(
+fn fill_area_span_paint(
     canvas: &mut Canvas,
     start: (f64, f64),
     end: (f64, f64),
     zero_y: f64,
-    color: [u8; 3],
+    paint: AreaBandPaint<'_>,
 ) {
-    fill_area_band(canvas, start, (start.0, zero_y), end, (end.0, zero_y), color);
+    fill_area_band_paint(canvas, start, (start.0, zero_y), end, (end.0, zero_y), paint);
 }
 
 pub(super) fn fill_area_bands(
@@ -1841,6 +2898,44 @@ pub(super) fn fill_area_band(
     base1: (f64, f64),
     color: [u8; 3],
 ) {
+    fill_area_band_paint(
+        canvas,
+        top0,
+        base0,
+        top1,
+        base1,
+        AreaBandPaint::Solid(color, 255),
+    );
+}
+
+#[derive(Clone, Copy)]
+enum AreaBandPaint<'a> {
+    Solid([u8; 3], u8),
+    Pattern(&'a super::pattern::PatternFill),
+    Skip,
+}
+
+fn area_band_paint(ser: &Series, fallback: [u8; 3]) -> AreaBandPaint<'_> {
+    if ser.area_no_fill {
+        AreaBandPaint::Skip
+    } else if let Some(pattern) = ser.area_pattern.as_ref() {
+        AreaBandPaint::Pattern(pattern)
+    } else {
+        AreaBandPaint::Solid(fallback, ser.fill_alpha)
+    }
+}
+
+fn fill_area_band_paint(
+    canvas: &mut Canvas,
+    top0: (f64, f64),
+    base0: (f64, f64),
+    top1: (f64, f64),
+    base1: (f64, f64),
+    paint: AreaBandPaint<'_>,
+) {
+    if matches!(paint, AreaBandPaint::Skip) {
+        return;
+    }
     let (x0, y0) = top0;
     let (_, b0) = base0;
     let (x1, y1) = top1;
@@ -1857,10 +2952,18 @@ pub(super) fn fill_area_band(
         let t = s0 / (s0 - s1);
         let xc = x0 + t * (x1 - x0);
         let yc = y0 + t * (y1 - y0);
-        canvas.fill_polygon(&[(x0, b0), (x0, y0), (xc, yc)], color);
-        canvas.fill_polygon(&[(xc, yc), (x1, y1), (x1, b1)], color);
+        fill_area_polygon(canvas, &[(x0, b0), (x0, y0), (xc, yc)], paint);
+        fill_area_polygon(canvas, &[(xc, yc), (x1, y1), (x1, b1)], paint);
     } else {
-        canvas.fill_polygon(&[(x0, b0), (x0, y0), (x1, y1), (x1, b1)], color);
+        fill_area_polygon(canvas, &[(x0, b0), (x0, y0), (x1, y1), (x1, b1)], paint);
+    }
+}
+
+fn fill_area_polygon(canvas: &mut Canvas, pts: &[(f64, f64)], paint: AreaBandPaint<'_>) {
+    match paint {
+        AreaBandPaint::Skip => {}
+        AreaBandPaint::Solid(color, alpha) => canvas.fill_polygon_alpha(pts, color, alpha),
+        AreaBandPaint::Pattern(patt) => canvas.fill_polygon_pattern(pts, patt),
     }
 }
 
@@ -2096,6 +3199,66 @@ pub(super) fn draw_bar_value(
 /// from zero, independently. Omitted or non-finite points are skipped and
 /// later series pack onto the running total. percentStacked uses value/sum
 /// of all (required positive finite) points in the category.
+/// Per-category positive and negative stack totals for auto scale. Official
+/// F22-6 omits min/max/major; feeding raw point values would clip the stack
+/// (max 40 vs stacked 70). Reuses scale_values, not a unique official lock.
+pub(super) fn stacked_extent_values(series: &[Series]) -> Vec<Option<f64>> {
+    let n = series.iter().map(|ser| ser.values.len()).max().unwrap_or(0);
+    let mut out = Vec::new();
+    for ci in 0..n {
+        let mut pos = 0.0;
+        let mut neg = 0.0;
+        let mut any = false;
+        for ser in series {
+            let Some(v) = ser.values.get(ci).copied().flatten() else {
+                continue;
+            };
+            if !v.is_finite() {
+                continue;
+            }
+            any = true;
+            if v >= 0.0 {
+                pos += v;
+            } else {
+                neg += v;
+            }
+        }
+        if any {
+            if pos > 0.0 {
+                out.push(Some(pos));
+            }
+            if neg < 0.0 {
+                out.push(Some(neg));
+            }
+        }
+    }
+    out
+}
+
+/// Algebraic running totals in series order, for line/area stacked auto
+/// scale. Official F23-7 omits min/max/major on a stacked line; feeding
+/// raw point values would clip the cumulative (max 40 vs 70). This is
+/// not the F22 bar pos/neg packing extent. Reuses scale_values, not a
+/// unique official lock.
+pub(super) fn cumulative_extent_values(series: &[Series]) -> Vec<Option<f64>> {
+    let n = series.iter().map(|ser| ser.values.len()).max().unwrap_or(0);
+    let mut out = Vec::new();
+    for ci in 0..n {
+        let mut run = 0.0;
+        for ser in series {
+            let Some(v) = ser.values.get(ci).copied().flatten() else {
+                continue;
+            };
+            if !v.is_finite() {
+                continue;
+            }
+            run += v;
+            out.push(Some(run));
+        }
+    }
+    out
+}
+
 pub(super) fn stack_segment(group: &[&Series], ci: usize, si: usize, percent: bool) -> Option<(f64, f64)> {
     if si >= group.len() {
         return None;
@@ -2220,10 +3383,22 @@ pub(super) fn draw_clustered_bars(
     axis_min: f64,
     axis_max: f64,
     reversed: bool,
+    group_secondary: Option<bool>,
 ) {
+    let group: Vec<&Series> = chart
+        .series
+        .iter()
+        .filter(|ser| {
+            ser.plot_kind == PlotKind::ClusteredBar
+                && group_secondary.map(|flag| ser.on_secondary == flag).unwrap_or(true)
+        })
+        .collect();
+    if group.is_empty() {
+        return;
+    }
     let cats = chart.categories.len().max(1) as f64;
     let stacked = !matches!(chart.stacking, Stacking::Clustered);
-    let n = if stacked { 1.0 } else { chart.series.len().max(1) as f64 };
+    let n = if stacked { 1.0 } else { group.len().max(1) as f64 };
     let overlap = if stacked { 0.0 } else { chart.overlap / 100.0 };
     let gap = chart.gap_width / 100.0;
     let slot = (plot.h + 1.0) / cats;
@@ -2239,11 +3414,11 @@ pub(super) fn draw_clustered_bars(
         draw_stacked_horizontal_bars(canvas, chart, plot, axis_min, axis_max, reversed, side, slot);
         return;
     }
-    let n_ser = chart.series.len();
+    let n_ser = group.len();
     for (ci, _) in chart.categories.iter().enumerate() {
         let origin =
             category_slot_origin(plot, ci, chart.categories.len(), chart.cats_from_bottom) + side;
-        for (si, ser) in chart.series.iter().enumerate() {
+        for (si, ser) in group.iter().enumerate() {
             let Some(value) = ser.values[ci] else {
                 continue;
             };
@@ -2284,8 +3459,13 @@ pub(super) fn draw_clustered_bars(
     }
 }
 
-/// OutsideEnd on horizontal bars follows the same category/cluster order as
-/// the marks. General integer formatting, plain font and complete values only.
+/// OutsideEnd and InsideEnd on horizontal bars follow the same category/cluster
+/// order as the marks. InsideEnd sits inward from the bar end with the same
+/// 6pt (3pt gap + 3pt inset) pad as the locked outEnd path. A zero value
+/// falls back to the locked non-negative OutsideEnd geometry (close-enough,
+/// not a unique lock). Short or narrow bars that cannot hold the box stay
+/// unsupported. Overflow off the canvas is still rejected rather than
+/// silently clipped.
 pub(super) fn draw_horizontal_value_labels(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -2304,7 +3484,10 @@ pub(super) fn draw_horizontal_value_labels(
     let side = (slot - bar_h * (n as f64 - (n - 1) as f64 * overlap)) / 2.0;
     let pad = canvas.dpi.pt_to_px_font(6.0);
     for (si, ser) in chart.series.iter().enumerate() {
-        if ser.value_label != Some(ValueLabel::OutsideEnd) {
+        let Some(position) = ser.value_label else {
+            continue;
+        };
+        if !matches!(position, ValueLabel::OutsideEnd | ValueLabel::InsideEnd) {
             continue;
         }
         let place = if chart.cats_from_bottom {
@@ -2325,10 +3508,30 @@ pub(super) fn draw_horizontal_value_labels(
             let end = x_of_dir(value.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
             let width = text_width(font, gdi, &text, px);
             let height = value_label_height(font, gdi, px);
-            let x = if *value < 0.0 {
-                end - pad - width
+            let fallback_outside = position == ValueLabel::InsideEnd && *value == 0.0;
+            if position == ValueLabel::InsideEnd && !fallback_outside {
+                let zero = x_of_dir(
+                    0.0_f64.clamp(axis_min, axis_max),
+                    axis_min,
+                    axis_max,
+                    plot,
+                    reversed,
+                );
+                if (end - zero).abs() < width + 2.0 * pad || bar_h < height {
+                    return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+                }
+            }
+            let place_as = if fallback_outside {
+                ValueLabel::OutsideEnd
             } else {
-                end + pad
+                position
+            };
+            let x = match (place_as, *value < 0.0) {
+                (ValueLabel::InsideEnd, false) | (ValueLabel::OutsideEnd, true) => {
+                    end - pad - width
+                }
+                (ValueLabel::InsideEnd, true) | (ValueLabel::OutsideEnd, false) => end + pad,
+                _ => end + pad,
             };
             let top =
                 category_slot_origin(plot, ci, chart.categories.len(), chart.cats_from_bottom)
@@ -2430,14 +3633,18 @@ pub(super) fn draw_value_labels(
                         + side
                         + si as f64 * width * (1.0 - overlap)
                         + width / 2.0;
-                    let top = if position == ValueLabel::InsideEnd {
+                    // Official inEnd for 0 falls back outside the axis using the
+                    // locked non-negative OutsideEnd 6pt pad. Close-enough, not
+                    // a unique official-probe lock.
+                    let fallback_outside = position == ValueLabel::InsideEnd && value == 0.0;
+                    let top = if position == ValueLabel::InsideEnd && !fallback_outside {
                         // Public inEnd box is 3pt from the mark end; its text
                         // has the same 3pt inset as the locked outEnd labels.
                         let zero =
                             y_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
-                        // Short/zero marks and box overflow are not auto-fitted
-                        // or silently clipped; their placement remains NI.
-                        if value == 0.0 || (zero - y).abs() < h + 2.0 * pad || width < w + pad {
+                        // Short/narrow marks that cannot hold the box stay NI
+                        // rather than auto-fit, clip, or stretch.
+                        if (zero - y).abs() < h + 2.0 * pad || width < w + pad {
                             return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
                         }
                         if value < 0.0 {
@@ -2464,6 +3671,7 @@ pub(super) fn draw_value_labels(
                 ),
             };
             if position == ValueLabel::InsideEnd
+                && value != 0.0
                 && (!x.is_finite()
                     || !top.is_finite()
                     || x < 0.0
@@ -2530,7 +3738,10 @@ pub(super) fn draw_bars(
     let group: Vec<&Series> = chart
         .series
         .iter()
-        .filter(|ser| group_secondary.map(|flag| ser.on_secondary == flag).unwrap_or(true))
+        .filter(|ser| {
+            ser.plot_kind == PlotKind::ClusteredColumn
+                && group_secondary.map(|flag| ser.on_secondary == flag).unwrap_or(true)
+        })
         .collect();
     if group.is_empty() {
         return;
@@ -2590,12 +3801,18 @@ pub(super) fn draw_bars(
             }
             let x = origin + si as f64 * bar_w * (1.0 - overlap);
             let clipped = value.clamp(axis_min, axis_max);
-            let y_val = if value < axis_origin && log_base.is_none() {
+            // Official F15-6 Chart.Export paints a 1px-tall sliver for a
+            // positive value below the explicit log min (A=1 with min=10).
+            // Close-enough, not a unique clip-offset lock.
+            let below_log_min = log_base.is_some() && value > 0.0 && value < axis_min;
+            let y_val = if below_log_min {
+                y_zero.saturating_sub(1)
+            } else if value < axis_origin && log_base.is_none() {
                 crossing_axis_y_mode(plot, axis_min, axis_max, step, clipped, None, reversed)
             } else {
                 y_map(clipped, axis_min, axis_max, plot, log_base, reversed).round() as i32
             };
-            if y_val == y_zero || bar_w < 0.2 {
+            if bar_w < 0.2 || (!below_log_min && y_val == y_zero) {
                 continue;
             }
             let color = if chart.vary_points {
@@ -2841,8 +4058,12 @@ pub(super) fn draw_legend(
     // S2) but flips the default right legend when catAx is minMax, so the
     // keys follow the visual stack (S2 above S1). Package legend/series XML
     // is otherwise identical. Other chart kinds keep series-index order.
+    let mixed_combo = chart.series.iter().any(|ser| ser.plot_kind != chart.kind);
+    // Official F26-5 keeps series-index order (S1 above S2). The bar-only
+    // minMax flip is a same-type visual-stack rule and is not applied to a
+    // mixed combo. Close-enough; not a general combo-legend lock.
     let legend_series: Vec<(usize, &Series)> =
-        if chart.kind == PlotKind::ClusteredBar && chart.cats_from_bottom {
+        if chart.kind == PlotKind::ClusteredBar && chart.cats_from_bottom && !mixed_combo {
             chart.series.iter().enumerate().rev().collect()
         } else {
             chart.series.iter().enumerate().collect()
@@ -2851,7 +4072,7 @@ pub(super) fn draw_legend(
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         draw_plot_key_styled(
             canvas,
-            chart.kind,
+            if mixed_combo { ser.plot_kind } else { chart.kind },
             x,
             y,
             x + key_width,
