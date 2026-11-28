@@ -1,5 +1,5 @@
 //! 导出可选 dpi：省略或 96 按该 DPI 的列行像素加 CopyPicture +1 边框；其它整数 DPI 原生重算，不是拉伸。
-//! exportSlideImage / exportPageImage 本切片不接受此字段。
+//! Word / PowerPoint 的同一字段见 docx_pptx_export_dpi.rs。
 
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -297,33 +297,6 @@ fn chart_and_sheet_honor_dpi_and_keep_default() {
     assert_phys_dpi(&sheet106, 106);
 }
 
-#[test]
-fn slide_and_page_export_reject_dpi_field() {
-    let src = book_line("notslide");
-    let png = tmp("slide", "png");
-    let err = run(&json!({
-        "schemaVersion": 1,
-        "action": "exportSlideImage",
-        "path": src.to_string_lossy(),
-        "id": "slide:1",
-        "output": png.to_string_lossy(),
-        "dpi": 106,
-    })
-    .to_string())
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-    let err = run(&json!({
-        "schemaVersion": 1,
-        "action": "exportPageImage",
-        "path": src.to_string_lossy(),
-        "id": "page:1",
-        "output": png.to_string_lossy(),
-        "dpi": 106,
-    })
-    .to_string())
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-}
 #[cfg(windows)]
 fn dark_ink_bbox(rgb: &[u8], w: u32, h: u32) -> (i32, i32, i32, i32) {
     let mut min_x = w as i32;

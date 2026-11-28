@@ -3,7 +3,7 @@ use crate::error::{Error, ErrorKind};
 use crate::opc::{Package, Relationships};
 use crate::xml::Element;
 
-use super::render_dpi::RenderDpi;
+use super::RenderDpi;
 
 #[derive(Clone)]
 struct FaceSpec {

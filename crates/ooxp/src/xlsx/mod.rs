@@ -43,8 +43,7 @@ mod outline;
 mod picture;
 mod pivot;
 mod print;
-pub(crate) mod render_dpi;
-pub(crate) use render_dpi::RenderDpi;
+pub(crate) use crate::render_dpi::RenderDpi;
 mod protect;
 mod request;
 mod shape;
@@ -86,14 +85,25 @@ pub(crate) use chart_gdi::{
     fill_device_stroked_rect, scale_device_rgba, scale_device_rgba_window, Face,
 };
 
+#[allow(dead_code)]
 pub(crate) fn render_clustered_chart(
     root: &crate::xml::Element,
     width: u32,
     height: u32,
     theme_xml: Option<&[u8]>,
 ) -> Result<Vec<u8>, crate::error::Error> {
+    render_clustered_chart_at(root, width, height, theme_xml, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn render_clustered_chart_at(
+    root: &crate::xml::Element,
+    width: u32,
+    height: u32,
+    theme_xml: Option<&[u8]>,
+    dpi: RenderDpi,
+) -> Result<Vec<u8>, crate::error::Error> {
     let accents = chart_paint::theme_accents(theme_xml);
-    chart_paint::render_chart(
+    chart_paint::render_chart_at(
         root,
         width,
         height,
@@ -102,6 +112,7 @@ pub(crate) fn render_clustered_chart(
         chart_paint::ChartHost::Slide,
         None,
         "",
+        dpi,
     )
 }
 

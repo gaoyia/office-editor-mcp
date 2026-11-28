@@ -47,7 +47,8 @@ pub use inspect::inspect;
 pub use layout_check::layout_check;
 pub use picture::export_media;
 pub use request::{parse_ops, parse_scope};
-pub use slide_paint::export_slide_image;
+#[allow(unused_imports)]
+pub use slide_paint::{export_slide_image, export_slide_image_at};
 
 pub struct ExportedMedia {
     pub bytes: Vec<u8>,

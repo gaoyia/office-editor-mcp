@@ -7,7 +7,7 @@
 //! (date-min)/(max-min) 把最小/最大放到连续左右沿（96 dpi 各留 `DATE_PAD_X` 像素，再按请求
 //! dpi 四舍五入；右沿为 `width-1-left`），不再映射到分类槽。不排序、不把缺日期或非数值日期当成等距轴。
 
-use super::render_dpi::RenderDpi;
+use super::RenderDpi;
 use crate::error::{Error, ErrorKind};
 
 const PAD_X: f64 = 2.0;

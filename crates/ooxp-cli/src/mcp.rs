@@ -401,6 +401,26 @@ fn field_schema(action: &str, field: &str, lang: Lang) -> Value {
             "description": say(lang, id_zh(action), id_en(action))
         }),
         "q" | "op" | "name" => json!({ "type": "string", "minLength": 1 }),
+        "dpi" => json!({
+            "type": "integer",
+            "minimum": 24,
+            "maximum": 600,
+            "description": say(
+                lang,
+                "可选。本次栅格化的整数 DPI。省略或 96 时与现有 96 dpi 出图像素一致。只影响写出的 PNG，不改源包，也不改系统 DPI。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸。合法范围 24 到 600。超出 1 到 4096 的像素边长仍报 NotImplemented。",
+                "Optional. Integer DPI for this rasterization. Omitted or 96 keeps the existing 96 dpi pixels. Affects only the written PNG, not the source package or system DPI. Coordinates, fonts, strokes, and spacing are computed natively at this DPI; this is not a 96 dpi bitmap stretch. Valid range is 24 to 600. Width or height outside 1 to 4096 pixels still returns NotImplemented."
+            )
+        }),
+        "tilePx" => json!({
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096,
+            "description": say(
+                lang,
+                "可选。把工作表出图切成不超过此边长的 PNG 块。",
+                "Optional. Split the sheet export into PNG tiles no larger than this edge length."
+            )
+        }),
         other => panic!("mcp 没有 {other} 的形状"),
     }
 }

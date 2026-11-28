@@ -15946,8 +15946,8 @@
           "type": "string"
         },
         "dpi": {
-          "description": "可选。本次栅格化的整数 DPI。省略或 96 时与现有 96 dpi 出图像素一致。只影响写出的 PNG，不改源包，也不改系统 DPI。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸。合法范围 24 到 600。超出 1 到 4096 的像素边长仍报 NotImplemented。exportSlideImage 与 exportPageImage 本切片不支持此字段。",
-          "descriptionEn": "Optional. Integer DPI for this rasterization. Omitted or 96 keeps the existing 96 dpi pixels. Affects only the written PNG, not the source package or system DPI. Coordinates, fonts, strokes, and spacing are computed natively at this DPI; this is not a 96 dpi bitmap stretch. Valid range is 24 to 600. Width or height outside 1 to 4096 pixels still returns NotImplemented. exportSlideImage and exportPageImage do not accept this field in this slice.",
+          "description": "可选。本次栅格化的整数 DPI。省略或 96 时与现有 96 dpi 出图像素一致。只影响写出的 PNG，不改源包，也不改系统 DPI。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸。合法范围 24 到 600。超出 1 到 4096 的像素边长仍报 NotImplemented。",
+          "descriptionEn": "Optional. Integer DPI for this rasterization. Omitted or 96 keeps the existing 96 dpi pixels. Affects only the written PNG, not the source package or system DPI. Coordinates, fonts, strokes, and spacing are computed natively at this DPI; this is not a 96 dpi bitmap stretch. Valid range is 24 to 600. Width or height outside 1 to 4096 pixels still returns NotImplemented.",
           "type": "integer",
           "minimum": 24,
           "maximum": 600
@@ -15994,8 +15994,8 @@
           "type": "string"
         },
         "dpi": {
-          "description": "可选。本次栅格化的整数 DPI。省略或 96 时与现有 96 dpi 出图像素一致。只影响写出的 PNG，不改源包，也不改系统 DPI。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸。合法范围 24 到 600。超出 1 到 4096 的像素边长仍报 NotImplemented。exportSlideImage 与 exportPageImage 本切片不支持此字段。",
-          "descriptionEn": "Optional. Integer DPI for this rasterization. Omitted or 96 keeps the existing 96 dpi pixels. Affects only the written PNG, not the source package or system DPI. Coordinates, fonts, strokes, and spacing are computed natively at this DPI; this is not a 96 dpi bitmap stretch. Valid range is 24 to 600. Width or height outside 1 to 4096 pixels still returns NotImplemented. exportSlideImage and exportPageImage do not accept this field in this slice.",
+          "description": "可选。本次栅格化的整数 DPI。省略或 96 时与现有 96 dpi 出图像素一致。只影响写出的 PNG，不改源包，也不改系统 DPI。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸。合法范围 24 到 600。超出 1 到 4096 的像素边长仍报 NotImplemented。",
+          "descriptionEn": "Optional. Integer DPI for this rasterization. Omitted or 96 keeps the existing 96 dpi pixels. Affects only the written PNG, not the source package or system DPI. Coordinates, fonts, strokes, and spacing are computed natively at this DPI; this is not a 96 dpi bitmap stretch. Valid range is 24 to 600. Width or height outside 1 to 4096 pixels still returns NotImplemented.",
           "type": "integer",
           "minimum": 24,
           "maximum": 600
@@ -16042,8 +16042,8 @@
           "type": "string"
         },
         "dpi": {
-          "description": "可选。本次栅格化的整数 DPI。省略或 96 时与现有 96 dpi 出图像素一致。只影响写出的 PNG，不改源包，也不改系统 DPI。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸。合法范围 24 到 600。超出 1 到 4096 的像素边长仍报 NotImplemented。exportSlideImage 与 exportPageImage 本切片不支持此字段。",
-          "descriptionEn": "Optional. Integer DPI for this rasterization. Omitted or 96 keeps the existing 96 dpi pixels. Affects only the written PNG, not the source package or system DPI. Coordinates, fonts, strokes, and spacing are computed natively at this DPI; this is not a 96 dpi bitmap stretch. Valid range is 24 to 600. Width or height outside 1 to 4096 pixels still returns NotImplemented. exportSlideImage and exportPageImage do not accept this field in this slice.",
+          "description": "可选。本次栅格化的整数 DPI。省略或 96 时与现有 96 dpi 出图像素一致。只影响写出的 PNG，不改源包，也不改系统 DPI。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸。合法范围 24 到 600。超出 1 到 4096 的像素边长仍报 NotImplemented。",
+          "descriptionEn": "Optional. Integer DPI for this rasterization. Omitted or 96 keeps the existing 96 dpi pixels. Affects only the written PNG, not the source package or system DPI. Coordinates, fonts, strokes, and spacing are computed natively at this DPI; this is not a 96 dpi bitmap stretch. Valid range is 24 to 600. Width or height outside 1 to 4096 pixels still returns NotImplemented.",
           "type": "integer",
           "minimum": 24,
           "maximum": 600
@@ -16053,8 +16053,8 @@
     "exportPageImageRequest": {
       "description": "把 docx 里没有字的一页画成 PNG。",
       "descriptionEn": "Draw one docx page that has no text to a PNG.",
-      "limits": "只读。不改源包，像素不进 inspect。id 是 page:N，从 1 起。只画单节、空段、Calibri 11 磅、没有页眉页脚的白页。宽高按 w:pgSz，96 dpi，twip×96/1440 四舍五入，要落在 1 到 4096 像素。有字、表格、图、页眉页脚或别的行距报 NotImplemented。xlsx 与 pptx 报 InvalidField。",
-      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. id is page:N, starting at 1. Only a white page with one section, empty paragraphs, Calibri 11 pt, and no header or footer is drawn. Width and height come from w:pgSz at 96 dpi, rounding twip times 96/1440, and must be 1 to 4096 pixels. Text, tables, pictures, headers, footers, or another line spacing return NotImplemented. xlsx and pptx return InvalidField.",
+      "limits": "只读。不改源包，像素不进 inspect。id 是 page:N，从 1 起。只画单节、空段、Calibri 11 磅、没有页眉页脚的白页。宽高按 w:pgSz，按请求 DPI 将 twip×dpi/1440 四舍五入（96 dpi 时与现有 twip×96/1440 像素一致），要落在 1 到 4096 像素。磅按磅×dpi/72 换算；嵌入图 extent 按 EMU×dpi/914400 截断，与历史 96 dpi 截断一致。不要套用 Excel 先按 96 量化再放大的行高规则。有字、表格、图、页眉页脚或别的行距报 NotImplemented。xlsx 与 pptx 报 InvalidField。可选 dpi 为 24 到 600 的整数；省略或 96 时保持现有 96 dpi 出图。不改源包与系统 DPI。",
+      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. id is page:N, starting at 1. Only a white page with one section, empty paragraphs, Calibri 11 pt, and no header or footer is drawn. Width and height come from w:pgSz at the requested DPI, rounding twip times dpi/1440 (at 96 dpi this matches the existing twip times 96/1440 pixels), and must be 1 to 4096 pixels. Points use pt times dpi/72. Embedded picture extents truncate EMU times dpi/914400, matching the historical 96 dpi truncation. Do not apply Excel's 96-first row-height quantization. Text, tables, pictures, headers, footers, or another line spacing return NotImplemented. xlsx and pptx return InvalidField. Optional dpi is an integer from 24 to 600; omitted or 96 keeps the existing 96 dpi export. The source package and system DPI are not changed.",
       "type": "object",
       "comment": "output 必填。不得默认写成源 path。contentType 固定为 image/png。",
       "required": [
@@ -16088,14 +16088,21 @@
         },
         "locale": {
           "type": "string"
+        },
+        "dpi": {
+          "description": "可选。本次栅格化的整数 DPI。省略或 96 时与现有 96 dpi 出图像素一致。只影响写出的 PNG，不改源包，也不改系统 DPI。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸。合法范围 24 到 600。超出 1 到 4096 的像素边长仍报 NotImplemented。",
+          "descriptionEn": "Optional. Integer DPI for this rasterization. Omitted or 96 keeps the existing 96 dpi pixels. Affects only the written PNG, not the source package or system DPI. Coordinates, fonts, strokes, and spacing are computed natively at this DPI; this is not a 96 dpi bitmap stretch. Valid range is 24 to 600. Width or height outside 1 to 4096 pixels still returns NotImplemented.",
+          "type": "integer",
+          "minimum": 24,
+          "maximum": 600
         }
       }
     },
     "exportSlideImageRequest": {
       "description": "按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、形状图片填充、形状文字、簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图、普通饼图和纯色单元格的表写成 PNG。",
       "descriptionEn": "Draw a pptx slide's background, PNG pictures, rectangles, rounded rectangles, ellipses, two-stop linear gradients, shape image fills, shape text, clustered column charts, clustered bar charts, standard line charts, marked scatter charts, standard area charts, standard pie charts, and solid table cells to a PNG.",
-      "limits": "只读。不改源包，像素不进 inspect。页底用本页、版式或母版上没有颜色变换的不透明纯色（含主题色），或不透明的两停点直角线性渐变；没有或画不了时铺白。半透明、路径、非直角或主题 bgRef 渐变仍铺白。还画没有旋转的 PNG、整像素且不缩放的裁剪、矩形、圆角矩形、椭圆、形状里的文字（含段落里 a:br 换行后的后续行）、簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图、普通饼图和纯色单元格的表。这些对象放在组合里、母版上和版式上也画。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 alpha，半透明会叠在已画像素上。两停点、直角、不透明的线性页底按同一条 Office 16.0 S 形曲线铺满整页。矩形上的渐变仍不能带描边。形状上的 blipFill 会按拉伸铺进没有旋转的矩形、圆角矩形和椭圆；平铺、fillRect 偏移、对不齐的裁剪、非 PNG、带颜色变换的 blip，或矩形上还带描边，让整页失败，不再静默跳过。p:pic 图片会画。画不了的对象让整页失败。宽或高超出 1 到 4096 像素也报 NotImplemented。xlsx 与 docx 报 InvalidField。",
-      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. Opaque solid page backgrounds without a color transform, including theme colors, come from the slide, then the layout, then the master. An opaque two-stop right-angle linear page gradient is drawn with the same Office 16.0 S-curve as shape gradients. Missing, unrecognized, translucent, path, non-right-angle, or theme bgRef gradients stay white. Unrotated PNG pictures, crops that stay on whole pixels and keep the same size, rectangles, rounded rectangles, ellipses, shape text (including later lines after an a:br), clustered column charts, clustered bar charts, standard line charts, marked scatter charts, standard area charts, standard pie charts, and solid table cells are drawn, including inside groups and on the master or layout. A two-stop linear gradient is drawn on an unrotated rectangle, rounded rectangle, or ellipse, and the stops may include alpha; translucent stops composite over pixels already drawn. A gradient on a rectangle still cannot have a stroke. A stretched shape blipFill is painted on an unrotated rectangle, rounded rectangle, or ellipse; tiling, a fillRect offset, a crop that does not stay on whole pixels, a non-PNG image, a color transform on the blip, or a stroked rectangle blipFill fails the slide rather than being skipped. p:pic pictures are drawn. An object that cannot be drawn fails the slide. Width or height outside 1 to 4096 pixels also returns NotImplemented. xlsx and docx return InvalidField.",
+      "limits": "只读。不改源包，像素不进 inspect。页底用本页、版式或母版上没有颜色变换的不透明纯色（含主题色），或不透明的两停点直角线性渐变；没有或画不了时铺白。半透明、路径、非直角或主题 bgRef 渐变仍铺白。还画没有旋转的 PNG、整像素且不缩放的裁剪、矩形、圆角矩形、椭圆、形状里的文字（含段落里 a:br 换行后的后续行）、簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图、普通饼图和纯色单元格的表。这些对象放在组合里、母版上和版式上也画。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 alpha，半透明会叠在已画像素上。两停点、直角、不透明的线性页底按同一条 Office 16.0 S 形曲线铺满整页。矩形上的渐变仍不能带描边。形状上的 blipFill 会按拉伸铺进没有旋转的矩形、圆角矩形和椭圆；平铺、fillRect 偏移、对不齐的裁剪、非 PNG、带颜色变换的 blip，或矩形上还带描边，让整页失败，不再静默跳过。p:pic 图片会画。画不了的对象让整页失败。宽高按 p:sldSz 的 EMU 以请求 DPI 四舍五入（EMU×dpi/914400；96 dpi 时与现有像素一致），不是先按 96 量化再放大。磅按磅×dpi/72。不要套用 Excel 先按 96 量化再放大的行高规则。宽或高超出 1 到 4096 像素也报 NotImplemented。xlsx 与 docx 报 InvalidField。可选 dpi 为 24 到 600 的整数；省略或 96 时保持现有 96 dpi 出图。不改源包与系统 DPI。",
+      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. Opaque solid page backgrounds without a color transform, including theme colors, come from the slide, then the layout, then the master. An opaque two-stop right-angle linear page gradient is drawn with the same Office 16.0 S-curve as shape gradients. Missing, unrecognized, translucent, path, non-right-angle, or theme bgRef gradients stay white. Unrotated PNG pictures, crops that stay on whole pixels and keep the same size, rectangles, rounded rectangles, ellipses, shape text (including later lines after an a:br), clustered column charts, clustered bar charts, standard line charts, marked scatter charts, standard area charts, standard pie charts, and solid table cells are drawn, including inside groups and on the master or layout. A two-stop linear gradient is drawn on an unrotated rectangle, rounded rectangle, or ellipse, and the stops may include alpha; translucent stops composite over pixels already drawn. A gradient on a rectangle still cannot have a stroke. A stretched shape blipFill is painted on an unrotated rectangle, rounded rectangle, or ellipse; tiling, a fillRect offset, a crop that does not stay on whole pixels, a non-PNG image, a color transform on the blip, or a stroked rectangle blipFill fails the slide rather than being skipped. p:pic pictures are drawn. An object that cannot be drawn fails the slide. Width and height come from p:sldSz EMU rounded at the requested DPI (EMU times dpi/914400; at 96 dpi this matches the existing pixels), not by quantizing at 96 and scaling up. Points use pt times dpi/72. Do not apply Excel's 96-first row-height quantization. Width or height outside 1 to 4096 pixels also returns NotImplemented. xlsx and docx return InvalidField. Optional dpi is an integer from 24 to 600; omitted or 96 keeps the existing 96 dpi export. The source package and system DPI are not changed.",
       "type": "object",
       "comment": "output 必填。不得默认写成源 path。contentType 固定为 image/png。",
       "required": [
@@ -16129,6 +16136,13 @@
         },
         "locale": {
           "type": "string"
+        },
+        "dpi": {
+          "description": "可选。本次栅格化的整数 DPI。省略或 96 时与现有 96 dpi 出图像素一致。只影响写出的 PNG，不改源包，也不改系统 DPI。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸。合法范围 24 到 600。超出 1 到 4096 的像素边长仍报 NotImplemented。",
+          "descriptionEn": "Optional. Integer DPI for this rasterization. Omitted or 96 keeps the existing 96 dpi pixels. Affects only the written PNG, not the source package or system DPI. Coordinates, fonts, strokes, and spacing are computed natively at this DPI; this is not a 96 dpi bitmap stretch. Valid range is 24 to 600. Width or height outside 1 to 4096 pixels still returns NotImplemented.",
+          "type": "integer",
+          "minimum": 24,
+          "maximum": 600
         }
       }
     },

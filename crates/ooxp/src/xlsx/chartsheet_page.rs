@@ -18,7 +18,7 @@
 use crate::error::{Error, ErrorKind};
 use crate::xml::Element;
 
-use super::render_dpi::RenderDpi;
+use super::RenderDpi;
 
 const EMU_PER_INCH: i64 = 914_400;
 const EMU_PER_MM: i64 = 36_000;

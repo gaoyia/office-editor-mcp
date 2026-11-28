@@ -14,7 +14,7 @@ xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图或普通饼图画成 PNG。像素不进 inspect。
 xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线、非负柱形或盈亏画成 PNG；合法日期轴按日期比例定位。像素不进 inspect。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。像素不进 inspect。画不了的对象让整表失败。
-`exportChartImage`、`exportSparklineImage`、`exportSheetImage` 可写可选整数字段 `dpi`（24 到 600）。省略或 `96` 时与现有 96 dpi 出图像素一致。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸位图。只影响本次 PNG，不改源包，也不改系统 DPI。非默认 DPI 会写入 pHYs（像素/米）；省略或 96 不写该块，以免改既有字节。宽或高超出 1 到 4096 像素仍报 NotImplemented。`exportSlideImage` 与 `exportPageImage` 本切片不接受此字段。
+`exportChartImage`、`exportSparklineImage`、`exportSheetImage`、`exportSlideImage` 与 `exportPageImage` 可写可选整数字段 `dpi`（24 到 600）。省略或 `96` 时与现有 96 dpi 出图像素一致。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸位图。只影响本次 PNG，不改源包，也不改系统 DPI。非默认 DPI 会写入 pHYs（像素/米）；省略或 96 不写该块，以免改既有字节。宽或高超出 1 到 4096 像素仍报 NotImplemented。Word 与 PowerPoint 按请求 DPI 一次换算（twip×dpi/1440 四舍五入、EMU×dpi/914400、磅×dpi/72）；Word 嵌入图 extent 仍按 EMU 截断，与历史 96 dpi 截断一致。不要把 Excel 先按 96 量化再放大的行高等特例套到 Word / PowerPoint。这是每次出图请求上的参数，不是包级或进程全局开关。
 
 示例（库默认仍是 96；对照官方 106 dpi 窗口时显式传入）：
 
@@ -28,6 +28,14 @@ xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。像
 
 ```json
 {"schemaVersion":1,"action":"exportSheetImage","path":"book.xlsx","id":"sheet:Sheet1","output":"sheet.png","dpi":106}
+```
+
+```json
+{"schemaVersion":1,"action":"exportSlideImage","path":"deck.pptx","id":"slide:1","output":"slide.png","dpi":192}
+```
+
+```json
+{"schemaVersion":1,"action":"exportPageImage","path":"note.docx","id":"page:1","output":"page.png","dpi":192}
 ```
 
 命令行用 `--input` 读取同一份领域 JSON（文件路径，或 `-` 表示标准输入）。不要把 JSON 路径当作位置参数，命令行会拒绝并退出码 2。
@@ -2585,8 +2593,9 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 | `id` | 是 | 幻灯片 id，与 inspect 的 `slides[].id` 相同，形如 `slide:1` |
 | `output` | 是 | 本地目标路径。缺了报 `MissingField`。不得默认写成源 `path` |
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
+| `dpi` | 否 | 本次栅格化的整数 DPI，24 到 600。省略或 96 时与现有 96 dpi 像素一致 |
 
-- 宽高按 `p:sldSz` 的 EMU，96 dpi 四舍五入成像素
+- 宽高按 `p:sldSz` 的 EMU，按请求 DPI 四舍五入（`EMU × dpi / 914400`）。省略或 96 时与现有 96 dpi 像素一致。这是原生换算，不是先按 96 量化再放大，也不套用 Excel 的行高特例
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - 页底先用本页的 `p:bg`。本页没有时用版式，版式也没有时用母版
 - `showMasterSp` 不改变页底。它只决定画不画母版和版式上的形状
@@ -2597,7 +2606,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `idx` 从 `1001` 起指向 `bgFillStyleLst`，`1` 到 `999` 指向 `fillStyleLst`。那一档必须是没有变换的 `phClr` 纯色，再用 `bgRef` 上的颜色代替
 - 半透明、带颜色变换的主题色、渐变页底仍不认。这一层已经写了页底但画不成时铺白，不改用更下层
 - 没有旋转、没有裁剪、没有平铺、没有 `fillRect` 偏移、拉伸铺满的不透明嵌入 PNG 页底，在 Windows 上按与图片放大同一套公开 GDI+（`InterpolationMode.HighQualityBicubic`、`WrapMode.TileFlipXY`、`PixelOffsetMode.Half`）画到整页，**包括源与页同尺寸的 1:1**，不走 `p:pic` 的逐字节拷贝。关系从拥有该页底的部件（本页、版式或母版）解析。官方 `pptx-preview-page-bg-image` 覆盖 1280×720 与 960×720 页、1:1 / 2× / 4×、版式与母版继承、矩形与图片遮盖，均为 `differ=0`、`maxDelta=0`（2026-11-17 03:59:14–04:00:04 Asia/Shanghai）。透明、平铺、裁剪、缩小或不透明条件不满足的图片页底铺白，不把 t93u 残差接受扩到页底。非 Windows 没有这条 GDI+ 对照路径，不声称与 Office 差 0
-- 位置和尺寸用 `a:off` 与 `a:ext`，同一套 96 dpi。后画的盖住先画的，超出页面的部分裁掉
+- 位置和尺寸用 `a:off` 与 `a:ext`，与页画布同一套请求 DPI。后画的盖住先画的，超出页面的部分裁掉
 - `p:pic` 和形状 `blipFill` 里的嵌入 PNG。目标宽高都等于源像素时原样拷贝。没有 `srcRect`、且目标宽和高都不小于源时，Windows 上按 GDI+ `InterpolationMode.HighQualityBicubic`、`WrapMode.TileFlipXY`、`PixelOffsetMode.Half` 放大，与 PowerPoint 16.0 对齐。不透明图（全部 alpha=255）官方对照多种源尺寸、整数与非整数倍率、不均匀拉伸、形状填充和左缘裁切，均为 `differ=0`、`maxDelta=0`
 - 带透明通道的放大在 Windows 上先按同一套插值，再叠到已画内容上。用户 t93u 验收范围只限当前图片放大及其透明度：位置、目标尺寸和边界必须与官方一致，色彩/alpha 混合可以有残差。官方 `pptx-preview-scale-image` 透明 2×2→4×4 页记录为 `differ=13`、`maxDelta=2`，几何锚点通过；不把这页写成像素差 0，也不放宽全局 MaxDelta。t93u 的残差接受不扩到渐变、半透明纯色矩形或其它绘制
 - 非 Windows 没有这条 GDI+ 对照路径：不透明放大沿用历史最近邻，不声称与 Office 差 0；带透明像素的放大整页失败，避免静默用最近邻冒充成功
@@ -2677,6 +2686,7 @@ irstRow 打开时，在 96dpi 幻灯片画布上沿首行底边画 4 像素实�
 | `id` | 是 | 页 id，形如 `page:1`，从 1 起 |
 | `output` | 是 | 本地目标路径。缺了报 `MissingField`。不得默认写成源 `path` |
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
+| `dpi` | 否 | 本次栅格化的整数 DPI，24 到 600。省略或 96 时与现有 96 dpi 像素一致 |
 
 - 可以画没有可见内容的页，或 Windows 上单节、单段的不透明拉丁（ASCII）Calibri 正文（同一段可按空格换行（GDI+ GenericTypographic 测宽；可排宽扣左缩进），行距与空段分页同一档并按半磅字号比例）。一节，节属性在 `w:body` 末尾
 - 没有页眉、页脚、页面边框、行号、文档网格，也没有多栏。有字页不允许非零 `gutter`，垂直对齐只接受 top
@@ -2686,7 +2696,7 @@ irstRow 打开时，在 96dpi 幻灯片画布上沿首行底边画 4 像素实�
 - 有字页在 Windows 上走已有公开 GDI+ `AntiAliasGridFit` 路径。非 Windows 对有字页报 `NotImplemented`。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可
 - 无文字表：按 `tblGrid` 累计列宽与行高（空自动行 = Calibri 11 行进 + 11 twip；显式 `trHeight` exact/atLeast）、`tblInd`、单元格 `shd` 纯色填色；`tblBorders` 的 `single`（sz 2/4/8、color auto/000000）画 1px 黑，`nil`/`none` 或去掉边框节点为无边。合并、`tblStyle`、表内文字/图、`tblLayout`、`tblCellMar`、非上述边色/粗细报 `NotImplemented`。不等宽且 `tblW=auto` 时 Word 可能 autofit，本实现跟 OOXML 网格，不建模 autofit
 - 单节 `wp:inline` 不透明 PNG 且 extent 像素与源一致时 1:1 拷贝；浮动/裁剪/透明/混排/缩放报 `NotImplemented`
-- 宽高按该节 `w:pgSz` 的 twip，96 dpi，`twip × 96 / 1440` 四舍五入成像素
+- 宽高按该节 `w:pgSz` 的 twip，按请求 DPI 将 `twip × dpi / 1440` 四舍五入成像素（96 dpi 时与现有 `twip × 96 / 1440` 一致）。磅按 `磅 × dpi / 72`。嵌入图 extent 按 `EMU × dpi / 914400` 截断，与历史 96 dpi 截断一致。不要套用 Excel 先按 96 量化再放大的行高规则
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - 页边距缺了按 1440 twip。正文区放不下一行报 `NotImplemented`
 - 合并/样式/表内文字的表、浮动图、分节符、或空段行距不是上面这一档，报 `NotImplemented`。无文字 plain 表与 1:1 不透明 inline PNG 已画

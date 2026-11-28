@@ -7,6 +7,7 @@ use std::io::Cursor;
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{self, Package};
+use crate::render_dpi::RenderDpi;
 use crate::xml::Element;
 
 use super::picture;
@@ -20,11 +21,18 @@ use crate::xlsx::{
 #[cfg(windows)]
 use crate::xlsx::{scale_device_rgba, scale_device_rgba_window};
 
-const EMU_PER_INCH: f64 = 914_400.0;
-const DPI: f64 = 96.0;
 const MAX_PX: u32 = 4096;
 
+#[allow(dead_code)]
 pub fn export_slide_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
+    export_slide_image_at(bytes, id, RenderDpi::DEFAULT)
+}
+
+pub fn export_slide_image_at(
+    bytes: &[u8],
+    id: &str,
+    dpi: RenderDpi,
+) -> Result<ExportedMedia, Error> {
     let n = parse_slide_id(id)?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let pres_part = opc::office_document_part(&pkg)?;
@@ -36,13 +44,13 @@ pub fn export_slide_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
         .ok_or_else(|| Error::with_path(ErrorKind::SlideNotFound { n: n as u32 }, "id"))?;
     let doc = super::list_pin::parse_part(&pkg, &slide.part)?;
     let (cx, cy) = picture::canvas_size(&pres.root);
-    let width = emu_span(cx)?;
-    let height = emu_span(cy)?;
+    let width = emu_span(cx, dpi)?;
+    let height = emu_span(cy, dpi)?;
     let mut rgb = vec![0u8; (width as usize) * (height as usize) * 3];
-    paint_page_background(&pkg, &slide.part, &doc.root, &mut rgb, width, height)?;
-    paint_inherited(&pkg, &slide.part, &doc.root, &mut rgb, width, height)?;
-    paint_tree(&pkg, &slide.part, &doc.root, &mut rgb, width, height)?;
-    let png = encode_png(width, height, &rgb)?;
+    paint_page_background(&pkg, &slide.part, &doc.root, &mut rgb, width, height, dpi)?;
+    paint_inherited(&pkg, &slide.part, &doc.root, &mut rgb, width, height, dpi)?;
+    paint_tree(&pkg, &slide.part, &doc.root, &mut rgb, width, height, dpi)?;
+    let png = encode_png(width, height, &rgb, dpi)?;
     Ok(ExportedMedia {
         bytes: png,
         content_type: Some("image/png".to_string()),
@@ -96,6 +104,7 @@ fn paint_page_background(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    _dpi: RenderDpi,
 ) -> Result<(), Error> {
     let layout_part = linked_part(pkg, slide_part, "/slideLayout")?;
     let layout_doc = match &layout_part {
@@ -417,6 +426,7 @@ fn paint_tree(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     let Some(tree) = root
         .child_by_local("cSld")
@@ -424,7 +434,7 @@ fn paint_tree(
     else {
         return Ok(());
     };
-    visit(pkg, slide_part, tree, &[], rgb, width, height)
+    visit(pkg, slide_part, tree, &[], rgb, width, height, dpi)
 }
 
 /// 母版、版式上已经会画的对象先画。页底已经铺好，本页内容还没画。
@@ -435,6 +445,7 @@ fn paint_inherited(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     if !shows_master_shapes(slide_root) {
         return Ok(());
@@ -446,10 +457,10 @@ fn paint_inherited(
     if shows_master_shapes(&layout.root) {
         if let Some(master_part) = linked_part(pkg, &layout_part, "/slideMaster")? {
             let master = super::list_pin::parse_part(pkg, &master_part)?;
-            paint_tree(pkg, &master_part, &master.root, rgb, width, height)?;
+            paint_tree(pkg, &master_part, &master.root, rgb, width, height, dpi)?;
         }
     }
-    paint_tree(pkg, &layout_part, &layout.root, rgb, width, height)
+    paint_tree(pkg, &layout_part, &layout.root, rgb, width, height, dpi)
 }
 
 fn shows_master_shapes(root: &Element) -> bool {
@@ -479,6 +490,7 @@ fn visit(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     for child in el.element_children() {
         match child.local_name() {
@@ -487,22 +499,22 @@ fn visit(
                 if transformed(child) || is_media(child) {
                     return Err(unsupported());
                 }
-                blit_pic(pkg, slide_part, child, chain, rgb, width, height)?;
+                blit_pic(pkg, slide_part, child, chain, rgb, width, height, dpi)?;
             }
-            "cxnSp" => paint_cxn(pkg, slide_part, child, chain, rgb, width, height)?,
-            "sp" => paint_sp(pkg, slide_part, child, chain, rgb, width, height)?,
-            "graphicFrame" => paint_frame(pkg, slide_part, child, chain, rgb, width, height)?,
+            "cxnSp" => paint_cxn(pkg, slide_part, child, chain, rgb, width, height, dpi)?,
+            "sp" => paint_sp(pkg, slide_part, child, chain, rgb, width, height, dpi)?,
+            "graphicFrame" => paint_frame(pkg, slide_part, child, chain, rgb, width, height, dpi)?,
             "grpSp" => {
                 if group_turns(child) {
                     return Err(unsupported());
                 }
                 let mut next = chain.to_vec();
                 next.push(super::layout_check::group_xfrm(child));
-                visit(pkg, slide_part, child, &next, rgb, width, height)?;
+                visit(pkg, slide_part, child, &next, rgb, width, height, dpi)?;
             }
             "AlternateContent" => {
                 if let Some(choice) = child.child_by_local("Choice") {
-                    visit(pkg, slide_part, choice, chain, rgb, width, height)?;
+                    visit(pkg, slide_part, choice, chain, rgb, width, height, dpi)?;
                 }
             }
             _ => return Err(unsupported()),
@@ -541,6 +553,7 @@ fn paint_sp(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     let Some(sp_pr) = sp.child_by_local("spPr") else {
         return Ok(());
@@ -550,17 +563,17 @@ fn paint_sp(
         .and_then(|geom| geom.attr("prst"))
         .unwrap_or("");
     match prst {
-        "rect" => paint_rect(pkg, part, sp, sp_pr, chain, rgb, width, height),
-        "ellipse" => paint_ellipse(pkg, part, sp, sp_pr, chain, rgb, width, height),
-        "roundRect" => paint_round(pkg, part, sp, sp_pr, chain, rgb, width, height),
+        "rect" => paint_rect(pkg, part, sp, sp_pr, chain, rgb, width, height, dpi),
+        "ellipse" => paint_ellipse(pkg, part, sp, sp_pr, chain, rgb, width, height, dpi),
+        "roundRect" => paint_round(pkg, part, sp, sp_pr, chain, rgb, width, height, dpi),
         "line" | "straightConnector1" => {
-            paint_line(pkg, part, sp, sp_pr, chain, rgb, width, height)
+            paint_line(pkg, part, sp, sp_pr, chain, rgb, width, height, dpi)
         }
         "bentConnector2" | "bentConnector3" | "bentConnector4" | "bentConnector5" => {
-            paint_elbow(pkg, part, sp, sp_pr, chain, rgb, width, height)
+            paint_elbow(pkg, part, sp, sp_pr, chain, rgb, width, height, dpi)
         }
         "curvedConnector2" | "curvedConnector3" | "curvedConnector4" | "curvedConnector5" => {
-            paint_curve(pkg, part, sp, sp_pr, chain, rgb, width, height)
+            paint_curve(pkg, part, sp, sp_pr, chain, rgb, width, height, dpi)
         }
         _ => Err(unsupported()),
     }
@@ -574,6 +587,7 @@ fn paint_cxn(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     let Some(sp_pr) = cxn.child_by_local("spPr") else {
         return Ok(());
@@ -584,13 +598,13 @@ fn paint_cxn(
         .unwrap_or("");
     match prst {
         "line" | "straightConnector1" => {
-            paint_line(pkg, part, cxn, sp_pr, chain, rgb, width, height)
+            paint_line(pkg, part, cxn, sp_pr, chain, rgb, width, height, dpi)
         }
         "bentConnector2" | "bentConnector3" | "bentConnector4" | "bentConnector5" => {
-            paint_elbow(pkg, part, cxn, sp_pr, chain, rgb, width, height)
+            paint_elbow(pkg, part, cxn, sp_pr, chain, rgb, width, height, dpi)
         }
         "curvedConnector2" | "curvedConnector3" | "curvedConnector4" | "curvedConnector5" => {
-            paint_curve(pkg, part, cxn, sp_pr, chain, rgb, width, height)
+            paint_curve(pkg, part, cxn, sp_pr, chain, rgb, width, height, dpi)
         }
         _ => Err(unsupported()),
     }
@@ -606,6 +620,7 @@ fn paint_line(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     if sp_pr
         .child_by_local("effectLst")
@@ -636,7 +651,7 @@ fn paint_line(
         return Err(unsupported());
     }
     reject_fancy_line(sp_pr)?;
-    let (color, stroke_f) = line_stroke(pkg, part, sp, sp_pr)?;
+    let (color, stroke_f) = line_stroke(pkg, part, sp, sp_pr, dpi)?;
     let sw = stroke_f.round().max(0.0) as i32;
     if sw != 1 && sw != 2 {
         return Err(unsupported());
@@ -650,26 +665,26 @@ fn paint_line(
                 rgb,
                 width,
                 height,
-                emu_px(x),
-                emu_px(x + cx),
-                emu_px(y),
+                emu_px(x, dpi),
+                emu_px(x + cx, dpi),
+                emu_px(y, dpi),
                 sw,
                 color,
             );
             return Ok(());
         }
-        let y0 = emu_px(y);
-        let y1 = emu_px(y + cy);
+        let y0 = emu_px(y, dpi);
+        let y1 = emu_px(y + cy, dpi);
         if sw == 1 && y0 == y1 {
             return Err(unsupported());
         }
-        paint_v_line(rgb, width, height, emu_px(x), y0, y1, sw, color);
+        paint_v_line(rgb, width, height, emu_px(x, dpi), y0, y1, sw, color);
         return Ok(());
     }
-    let x0 = emu_px(if flip_h { x + cx } else { x });
-    let y0 = emu_px(if flip_v { y + cy } else { y });
-    let x1 = emu_px(if flip_h { x } else { x + cx });
-    let y1 = emu_px(if flip_v { y } else { y + cy });
+    let x0 = emu_px(if flip_h { x + cx } else { x }, dpi);
+    let y0 = emu_px(if flip_v { y + cy } else { y }, dpi);
+    let x1 = emu_px(if flip_h { x } else { x + cx }, dpi);
+    let y1 = emu_px(if flip_v { y } else { y + cy }, dpi);
     if x0 == x1 && y0 == y1 {
         return Err(unsupported());
     }
@@ -791,6 +806,7 @@ fn paint_elbow(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     if sp_pr
         .child_by_local("effectLst")
@@ -829,7 +845,7 @@ fn paint_elbow(
         return Err(unsupported());
     }
     reject_fancy_line(sp_pr)?;
-    let (color, stroke_f) = line_stroke(pkg, part, sp, sp_pr)?;
+    let (color, stroke_f) = line_stroke(pkg, part, sp, sp_pr, dpi)?;
     let sw = stroke_f.round().max(0.0) as i32;
     if sw != 1 && sw != 2 {
         return Err(unsupported());
@@ -845,7 +861,7 @@ fn paint_elbow(
         elbow_adj(sp_pr, "adj1"),
         elbow_adj(sp_pr, "adj2"),
         elbow_adj(sp_pr, "adj3"),
-    );
+     dpi);
     if pts.is_empty() {
         return Err(unsupported());
     }
@@ -880,6 +896,7 @@ fn elbow_points(
     adj1: i64,
     adj2: i64,
     adj3: i64,
+    dpi: RenderDpi,
 ) -> Vec<(f32, f32)> {
     let along = |len: i64, adj: i64| (len as i128 * adj as i128 / 100_000) as i64;
     let raw = match prst {
@@ -912,7 +929,7 @@ fn elbow_points(
         .map(|(px, py)| {
             let px = if flip_h { x + cx - (px - x) } else { px };
             let py = if flip_v { y + cy - (py - y) } else { py };
-            (emu_f(px) as f32, emu_f(py) as f32)
+            (emu_f(px, dpi) as f32, emu_f(py, dpi) as f32)
         })
         .collect()
 }
@@ -943,6 +960,7 @@ fn paint_curve(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     if sp_pr
         .child_by_local("effectLst")
@@ -981,7 +999,7 @@ fn paint_curve(
         return Err(unsupported());
     }
     reject_fancy_line(sp_pr)?;
-    let (color, stroke_f) = line_stroke(pkg, part, sp, sp_pr)?;
+    let (color, stroke_f) = line_stroke(pkg, part, sp, sp_pr, dpi)?;
     let sw = stroke_f.round().max(0.0) as i32;
     if sw != 1 && sw != 2 {
         return Err(unsupported());
@@ -997,7 +1015,7 @@ fn paint_curve(
         elbow_adj(sp_pr, "adj1"),
         elbow_adj(sp_pr, "adj2"),
         elbow_adj(sp_pr, "adj3"),
-    );
+     dpi);
     if pts.is_empty() {
         return Err(unsupported());
     }
@@ -1018,6 +1036,7 @@ fn curve_points(
     adj1: i64,
     adj2: i64,
     adj3: i64,
+    dpi: RenderDpi,
 ) -> Vec<(f32, f32)> {
     let w = cx;
     let h = cy;
@@ -1107,7 +1126,7 @@ fn curve_points(
             let py = y + py;
             let px = if flip_h { x + cx - (px - x) } else { px };
             let py = if flip_v { y + cy - (py - y) } else { py };
-            (emu_f(px) as f32, emu_f(py) as f32)
+            (emu_f(px, dpi) as f32, emu_f(py, dpi) as f32)
         })
         .collect()
 }
@@ -1134,8 +1153,9 @@ fn paint_rect(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
-    if let Some(stroked) = stroked_rect(pkg, part, sp_pr, chain)? {
+    if let Some(stroked) = stroked_rect(pkg, part, sp_pr, chain, dpi)? {
         if !paint_stroked_rect(
             rgb,
             width,
@@ -1152,27 +1172,27 @@ fn paint_rect(
         }
         paint_tx(
             sp, stroked.x, stroked.y, stroked.w, stroked.h, rgb, width, height,
-        );
+         dpi);
         return Ok(());
     }
-    if let Some((color, x, y, w, h)) = plain_rect(sp, chain) {
+    if let Some((color, x, y, w, h)) = plain_rect(sp, chain, dpi) {
         fill_rect(rgb, width, height, x, y, w, h, color);
-        paint_tx(sp, x, y, w, h, rgb, width, height);
+        paint_tx(sp, x, y, w, h, rgb, width, height, dpi);
         return Ok(());
     }
-    if let Some((color, alpha, x, y, w, h)) = translucent_rect(sp, chain) {
+    if let Some((color, alpha, x, y, w, h)) = translucent_rect(sp, chain, dpi) {
         blend_rect(rgb, width, height, x, y, w, h, color, alpha);
-        paint_tx(sp, x, y, w, h, rgb, width, height);
+        paint_tx(sp, x, y, w, h, rgb, width, height, dpi);
         return Ok(());
     }
-    if let Some((x, y, w, h)) = plain_box(sp, chain) {
+    if let Some((x, y, w, h)) = plain_box(sp, chain, dpi) {
         if let Some(color) = scheme_rect_color(pkg, part, sp_pr)? {
             fill_rect(rgb, width, height, x, y, w, h, color);
-            paint_tx(sp, x, y, w, h, rgb, width, height);
+            paint_tx(sp, x, y, w, h, rgb, width, height, dpi);
             return Ok(());
         }
     }
-    if paint_rotated_opaque_rect(pkg, part, sp, sp_pr, chain, rgb, width, height)? {
+    if paint_rotated_opaque_rect(pkg, part, sp, sp_pr, chain, rgb, width, height, dpi)? {
         return Ok(());
     }
     let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
@@ -1189,12 +1209,12 @@ fn paint_rect(
         return Ok(());
     }
     let (x, y, cx, cy) = map_box(xfrm, chain);
-    let (x, y, w, h) = (emu_px(x), emu_px(y), emu_px(cx), emu_px(cy));
+    let (x, y, w, h) = (emu_px(x, dpi), emu_px(y, dpi), emu_px(cx, dpi), emu_px(cy, dpi));
     if w <= 0 || h <= 0 {
         return Ok(());
     }
     if sp_pr.child_by_local("noFill").is_some() && line_is_clear(sp_pr) {
-        paint_tx(sp, x, y, w, h, rgb, width, height);
+        paint_tx(sp, x, y, w, h, rgb, width, height, dpi);
         return Ok(());
     }
     if sp_pr.child_by_local("gradFill").is_some() {
@@ -1203,7 +1223,7 @@ fn paint_rect(
             return Err(unsupported());
         }
         fill_gradient(rgb, width, height, x, y, w, h, grad);
-        paint_tx(sp, x, y, w, h, rgb, width, height);
+        paint_tx(sp, x, y, w, h, rgb, width, height, dpi);
         return Ok(());
     }
     if let Some(fill) = sp_pr.child_by_local("blipFill") {
@@ -1223,7 +1243,7 @@ fn paint_rect(
             height,
             |_, _| 255,
         )?;
-        paint_tx(sp, x, y, w, h, rgb, width, height);
+        paint_tx(sp, x, y, w, h, rgb, width, height, dpi);
         return Ok(());
     }
     Ok(())
@@ -1238,8 +1258,9 @@ fn paint_ellipse(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
-    let Some(oval) = oval_box(sp_pr, chain)? else {
+    let Some(oval) = oval_box(sp_pr, chain, dpi)? else {
         return Ok(());
     };
     if let Some(fill) = sp_pr.child_by_local("blipFill") {
@@ -1279,7 +1300,7 @@ fn paint_ellipse(
         rgb,
         width,
         height,
-    );
+     dpi);
     Ok(())
 }
 
@@ -1292,8 +1313,9 @@ fn paint_round(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
-    let Some(round) = round_box(sp_pr, chain)? else {
+    let Some(round) = round_box(sp_pr, chain, dpi)? else {
         return Ok(());
     };
     if let Some(fill) = sp_pr.child_by_local("blipFill") {
@@ -1394,7 +1416,7 @@ fn paint_round(
             color,
         );
     }
-    paint_tx(sp, round.x, round.y, round.w, round.h, rgb, width, height);
+    paint_tx(sp, round.x, round.y, round.w, round.h, rgb, width, height, dpi);
     Ok(())
 }
 
@@ -1431,6 +1453,7 @@ struct Round {
 fn oval_box(
     sp_pr: &Element,
     chain: &[super::layout_check::GroupXfrm],
+    dpi: RenderDpi,
 ) -> Result<Option<Oval>, Error> {
     if rotated(sp_pr) {
         return Err(unsupported());
@@ -1439,26 +1462,27 @@ fn oval_box(
         return Ok(None);
     };
     let (ex, ey, ecx, ecy) = map_box(xfrm, chain);
-    let (w, h) = (emu_f(ecx), emu_f(ecy));
-    if w <= 0.0 || h <= 0.0 || emu_px(ecx) <= 0 || emu_px(ecy) <= 0 {
+    let (w, h) = (emu_f(ecx, dpi), emu_f(ecy, dpi));
+    if w <= 0.0 || h <= 0.0 || emu_px(ecx, dpi) <= 0 || emu_px(ecy, dpi) <= 0 {
         return Ok(None);
     }
     let (fill, grad) = shape_paint(sp_pr)?;
     Ok(Some(Oval {
-        x: emu_f(ex),
-        y: emu_f(ey),
+        x: emu_f(ex, dpi),
+        y: emu_f(ey, dpi),
         w,
         h,
         fill,
         grad,
         stroke: stroke_color(sp_pr)?,
-        stroke_f: stroke_width_f(sp_pr),
+        stroke_f: stroke_width_f(sp_pr, dpi),
     }))
 }
 
 fn round_box(
     sp_pr: &Element,
     chain: &[super::layout_check::GroupXfrm],
+    dpi: RenderDpi,
 ) -> Result<Option<Round>, Error> {
     if rotated(sp_pr) {
         return Err(unsupported());
@@ -1467,7 +1491,7 @@ fn round_box(
         return Ok(None);
     };
     let (ex, ey, ecx, ecy) = map_box(xfrm, chain);
-    let (x, y, w, h) = (emu_px(ex), emu_px(ey), emu_px(ecx), emu_px(ecy));
+    let (x, y, w, h) = (emu_px(ex, dpi), emu_px(ey, dpi), emu_px(ecx, dpi), emu_px(ecy, dpi));
     if w <= 0 || h <= 0 {
         return Ok(None);
     }
@@ -1480,12 +1504,12 @@ fn round_box(
         fill,
         grad,
         radius: round_radius(sp_pr, w, h),
-        radius_f: round_radius_f(sp_pr, emu_f(ecx), emu_f(ecy)),
+        radius_f: round_radius_f(sp_pr, emu_f(ecx, dpi), emu_f(ecy, dpi)),
         stroke: stroke_color(sp_pr)?,
-        stroke_px: stroke_px(sp_pr),
-        stroke_f: stroke_width_f(sp_pr),
-        edge_r: emu_px(ex.saturating_add(ecx)),
-        edge_b: emu_px(ey.saturating_add(ecy)),
+        stroke_px: stroke_px(sp_pr, dpi),
+        stroke_f: stroke_width_f(sp_pr, dpi),
+        edge_r: emu_px(ex.saturating_add(ecx), dpi),
+        edge_b: emu_px(ey.saturating_add(ecy), dpi),
     }))
 }
 
@@ -1544,16 +1568,19 @@ fn shape_paint(sp_pr: &Element) -> Result<(RgbaFill, Option<LinearGrad>), Error>
     Ok((empty_fill(), None))
 }
 
-fn stroke_px(sp_pr: &Element) -> i32 {
-    stroke_width_f(sp_pr).round().max(0.0) as i32
+fn stroke_px(sp_pr: &Element, dpi: RenderDpi) -> i32 {
+    stroke_width_f(sp_pr, dpi).round().max(0.0) as i32
 }
 
-fn stroke_width_f(sp_pr: &Element) -> f64 {
+fn stroke_width_f(sp_pr: &Element, dpi: RenderDpi) -> f64 {
     let raw = sp_pr
         .child_by_local("ln")
         .and_then(|ln| ln.attr("w"))
         .unwrap_or("9525");
-    raw.parse::<i64>().map(emu_f).unwrap_or(0.0).max(0.0)
+    raw.parse::<i64>()
+        .map(|emu| emu_f(emu, dpi))
+        .unwrap_or(0.0)
+        .max(0.0)
 }
 
 /// 直线描边色：显式 `a:ln/a:solidFill`，或 `p:style` 的 `lnRef` 主题色。宽度缺省按 1 像素。
@@ -1562,6 +1589,7 @@ fn line_stroke(
     part: &str,
     sp: &Element,
     sp_pr: &Element,
+    dpi: RenderDpi,
 ) -> Result<([u8; 3], f64), Error> {
     if let Some(ln) = sp_pr.child_by_local("ln") {
         if ln.child_by_local("noFill").is_some() {
@@ -1569,7 +1597,7 @@ fn line_stroke(
         }
         let fill = ln.child_by_local("solidFill").ok_or_else(unsupported)?;
         let color = solid_line_color(pkg, part, fill)?;
-        return Ok((color, stroke_width_f(sp_pr)));
+        return Ok((color, stroke_width_f(sp_pr, dpi)));
     }
     let Some(reference) = sp
         .child_by_local("style")
@@ -1746,12 +1774,13 @@ fn paint_frame(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     let Some(xfrm) = frame.child_by_local("xfrm") else {
         return Err(unsupported());
     };
     let (x, y, cx, cy) = map_box(xfrm, chain);
-    let (x, y, w, h) = (emu_px(x), emu_px(y), emu_px(cx), emu_px(cy));
+    let (x, y, w, h) = (emu_px(x, dpi), emu_px(y, dpi), emu_px(cx, dpi), emu_px(cy, dpi));
     if w <= 0 || h <= 0 {
         return Err(unsupported());
     }
@@ -1762,10 +1791,10 @@ fn paint_frame(
         return Err(unsupported());
     };
     if let Some(chart) = data.child_by_local("chart") {
-        return paint_chart(pkg, slide_part, chart, rgb, width, height, x, y, w, h);
+        return paint_chart(pkg, slide_part, chart, rgb, width, height, x, y, w, h, dpi);
     }
     if let Some(tbl) = data.child_by_local("tbl") {
-        paint_table(pkg, tbl, rgb, width, height, x, y)?;
+        paint_table(pkg, tbl, rgb, width, height, x, y, dpi)?;
         return Ok(());
     }
     Err(unsupported())
@@ -1782,6 +1811,7 @@ fn paint_chart(
     y: i32,
     w: i32,
     h: i32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     let Some(rid) = chart.attr_local("id").filter(|s| !s.is_empty()) else {
         return Err(unsupported());
@@ -1790,7 +1820,7 @@ fn paint_chart(
     let bytes = pkg.get(&part).map_err(|_| unsupported())?;
     let doc = crate::xml::parse(bytes).map_err(|_| unsupported())?;
     let theme = pkg.get("/ppt/theme/theme1.xml").ok();
-    let png = crate::xlsx::render_clustered_chart(&doc.root, w as u32, h as u32, theme)
+    let png = crate::xlsx::render_clustered_chart_at(&doc.root, w as u32, h as u32, theme, dpi)
         .map_err(|_| unsupported())?;
     let image = decode_png(&png)?;
     paint_image(rgb, width, height, x, y, w as u32, h as u32, &image, None)?;
@@ -1805,6 +1835,7 @@ fn paint_table(
     height: u32,
     x: i32,
     y: i32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     let col_emus: Vec<i64> = tbl
         .child_by_local("tblGrid")
@@ -1827,8 +1858,8 @@ fn paint_table(
         .iter()
         .map(|tr| tr.attr("h").and_then(|raw| raw.parse().ok()).unwrap_or(0))
         .collect();
-    let xs = table_grid_edges(x, &col_emus);
-    let ys = table_grid_edges(y, &row_emus);
+    let xs = table_grid_edges(x, &col_emus, dpi);
+    let ys = table_grid_edges(y, &row_emus, dpi);
     // 横向合并：锚格 `gridSpan`，后续格 `hMerge`。纵向合并仍整表不画。
     // 带合并且会走默认无样式灰边时整表不画（灰边交点未差 0，且内线穿过合并区）。
     let mut has_h_merge = false;
@@ -1885,11 +1916,11 @@ fn paint_table(
     }
     if let Some(look) = style {
         if look.first_row {
-            paint_medium_style2_header_bottom_bar(rgb, width, height, &xs, &ys);
+            paint_medium_style2_header_bottom_bar(rgb, width, height, &xs, &ys, dpi);
         }
     }
     if should_paint_default_table_grid(tbl) {
-        paint_default_table_grid(rgb, width, height, &xs, &ys);
+        paint_default_table_grid(rgb, width, height, &xs, &ys, dpi);
     }
     for (row_index, tr) in rows.iter().enumerate() {
         let py = *ys.get(row_index).unwrap_or(&y);
@@ -1921,7 +1952,7 @@ fn paint_table(
                 rgb,
                 width,
                 height,
-            );
+             dpi);
             i += span;
         }
     }
@@ -1972,22 +2003,30 @@ fn should_paint_default_table_grid(tbl: &Element) -> bool {
         })
 }
 
-fn paint_default_table_grid(rgb: &mut [u8], width: u32, height: u32, xs: &[i32], ys: &[i32]) {
+fn paint_default_table_grid(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    xs: &[i32],
+    ys: &[i32],
+    dpi: RenderDpi,
+) {
     if xs.len() < 2 || ys.len() < 2 {
         return;
     }
-    if !paint_default_table_grid_gdi(rgb, width, height, xs, ys) {
-        paint_default_table_grid_sharp(rgb, width, height, xs, ys);
+    let sw = dpi.scale_px(DEFAULT_TABLE_GRID_PX);
+    if !paint_default_table_grid_gdi(rgb, width, height, xs, ys, sw) {
+        paint_default_table_grid_sharp(rgb, width, height, xs, ys, sw);
     }
 }
 
-fn table_grid_edges(origin: i32, spans: &[i64]) -> Vec<i32> {
+fn table_grid_edges(origin: i32, spans: &[i64], dpi: RenderDpi) -> Vec<i32> {
     let mut edges = Vec::with_capacity(spans.len() + 1);
     edges.push(origin);
     let mut acc = 0i64;
     for &span in spans {
         acc = acc.saturating_add(span);
-        edges.push(origin.saturating_add(emu_px(acc)));
+        edges.push(origin.saturating_add(emu_px(acc, dpi)));
     }
     edges
 }
@@ -1998,6 +2037,7 @@ fn paint_default_table_grid_gdi(
     height: u32,
     xs: &[i32],
     ys: &[i32],
+    sw: i32,
 ) -> bool {
     let x0 = xs[0];
     let x1 = xs[xs.len() - 1];
@@ -2006,33 +2046,41 @@ fn paint_default_table_grid_gdi(
     let mut ok = true;
     // 每条网格线单独描一次：交点是两次 50% 黑叠色，不能用闭合折线一次覆盖。
     for &x in xs {
-        ok &= fill_device_line(x, y0, x, y1, DEFAULT_TABLE_GRID_PX, |px, py, cov| {
+        ok &= fill_device_line(x, y0, x, y1, sw, |px, py, cov| {
             blend_half_black(rgb, width, height, px, py, cov)
         });
     }
     for &y in ys {
-        ok &= fill_device_line(x0, y, x1, y, DEFAULT_TABLE_GRID_PX, |px, py, cov| {
+        ok &= fill_device_line(x0, y, x1, y, sw, |px, py, cov| {
             blend_half_black(rgb, width, height, px, py, cov)
         });
     }
     ok
 }
 
-fn paint_default_table_grid_sharp(rgb: &mut [u8], width: u32, height: u32, xs: &[i32], ys: &[i32]) {
+fn paint_default_table_grid_sharp(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    xs: &[i32],
+    ys: &[i32],
+    sw: i32,
+) {
     let y0 = ys[0];
     let y1 = ys[ys.len() - 1];
     let x0 = xs[0];
     let x1 = xs[xs.len() - 1];
+    let inset = (sw - 1).max(0);
     for &x in xs {
-        for py in (y0 - 1)..=y1 {
-            for px in (x - 1)..=x {
+        for py in (y0 - inset)..=y1 {
+            for px in (x - inset)..=x {
                 blend_half_black(rgb, width, height, px, py, 255);
             }
         }
     }
     for &y in ys {
-        for px in (x0 - 1)..=x1 {
-            for py in (y - 1)..=y {
+        for px in (x0 - inset)..=x1 {
+            for py in (y - inset)..=y {
                 blend_half_black(rgb, width, height, px, py, 255);
             }
         }
@@ -2178,6 +2226,7 @@ fn paint_medium_style2_header_bottom_bar(
     height: u32,
     xs: &[i32],
     ys: &[i32],
+    dpi: RenderDpi,
 ) {
     if xs.len() < 2 || ys.len() < 2 {
         return;
@@ -2185,14 +2234,15 @@ fn paint_medium_style2_header_bottom_bar(
     let x0 = xs[0];
     let x1 = xs[xs.len() - 1];
     let edge = ys[1];
+    let bar = dpi.scale_px(MEDIUM_STYLE2_HEADER_BAR_PX);
     fill_rect(
         rgb,
         width,
         height,
         x0,
-        edge - MEDIUM_STYLE2_HEADER_BAR_PX,
+        edge - bar,
         x1 - x0,
-        MEDIUM_STYLE2_HEADER_BAR_PX * 2,
+        bar * 2,
         WHITE,
     );
 }
@@ -2221,6 +2271,7 @@ fn paint_cell_text(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) {
     let Some(tx) = tc.child_by_local("txBody") else {
         return;
@@ -2229,8 +2280,8 @@ fn paint_cell_text(
     let inset = |name: &str, default: i64| {
         pr.and_then(|el| el.attr(name))
             .and_then(|raw| raw.parse().ok())
-            .map(emu_px)
-            .unwrap_or_else(|| emu_px(default))
+            .map(|v| emu_px(v, dpi))
+            .unwrap_or_else(|| emu_px(default, dpi))
     };
     let left = x + inset("marL", 91_440);
     let top = y + inset("marT", 45_720);
@@ -2239,14 +2290,14 @@ fn paint_cell_text(
     let anchor = pr.and_then(|el| el.attr("anchor")).unwrap_or("t");
     let mut lines = Vec::new();
     for para in tx.element_children().filter(|el| el.local_name() == "p") {
-        lines.extend(cell_lines(para, fonts, header));
+        lines.extend(cell_lines(para, fonts, header, dpi));
     }
     paint_text_block(&lines, left, top, right, bottom, anchor, rgb, width, height);
 }
 
-fn cell_lines(para: &Element, fonts: &MinorFonts, header: bool) -> Vec<TextLine> {
+fn cell_lines(para: &Element, fonts: &MinorFonts, header: bool, dpi: RenderDpi) -> Vec<TextLine> {
     let rpr = run_rpr(para);
-    para_lines(para)
+    para_lines(para, dpi)
         .into_iter()
         .map(|mut line| {
             if line.latin.is_empty() {
@@ -2267,8 +2318,8 @@ fn cell_lines(para: &Element, fonts: &MinorFonts, header: bool) -> Vec<TextLine>
 }
 
 #[cfg(test)]
-fn cell_line(para: &Element, fonts: &MinorFonts, header: bool) -> Option<TextLine> {
-    cell_lines(para, fonts, header).into_iter().next()
+fn cell_line(para: &Element, fonts: &MinorFonts, header: bool, dpi: RenderDpi) -> Option<TextLine> {
+    cell_lines(para, fonts, header, dpi).into_iter().next()
 }
 
 fn run_rpr(para: &Element) -> Option<&Element> {
@@ -2277,7 +2328,7 @@ fn run_rpr(para: &Element) -> Option<&Element> {
         .child_by_local("rPr")
 }
 
-fn paint_tx(sp: &Element, x: i32, y: i32, w: i32, h: i32, rgb: &mut [u8], width: u32, height: u32) {
+fn paint_tx(sp: &Element, x: i32, y: i32, w: i32, h: i32, rgb: &mut [u8], width: u32, height: u32, dpi: RenderDpi) {
     let Some(tx) = sp.child_by_local("txBody") else {
         return;
     };
@@ -2285,8 +2336,8 @@ fn paint_tx(sp: &Element, x: i32, y: i32, w: i32, h: i32, rgb: &mut [u8], width:
     let inset = |name: &str, default: i64| {
         body.and_then(|el| el.attr(name))
             .and_then(|raw| raw.parse().ok())
-            .map(emu_px)
-            .unwrap_or_else(|| emu_px(default))
+            .map(|v| emu_px(v, dpi))
+            .unwrap_or_else(|| emu_px(default, dpi))
     };
     let left = x + inset("lIns", 91_440);
     let top = y + inset("tIns", 45_720);
@@ -2300,7 +2351,7 @@ fn paint_tx(sp: &Element, x: i32, y: i32, w: i32, h: i32, rgb: &mut [u8], width:
     let anchor = body.and_then(|el| el.attr("anchor")).unwrap_or("t");
     let mut lines: Vec<TextLine> = Vec::new();
     for para in tx.element_children().filter(|el| el.local_name() == "p") {
-        lines.extend(para_lines(para));
+        lines.extend(para_lines(para, dpi));
     }
     paint_text_block(&lines, left, top, right, bottom, anchor, rgb, width, height);
 }
@@ -2384,7 +2435,7 @@ struct TextLine {
     align: String,
 }
 
-fn para_lines(para: &Element) -> Vec<TextLine> {
+fn para_lines(para: &Element, dpi: RenderDpi) -> Vec<TextLine> {
     let align = para
         .child_by_local("pPr")
         .and_then(|el| el.attr("algn"))
@@ -2399,7 +2450,7 @@ fn para_lines(para: &Element) -> Vec<TextLine> {
             *rpr = None;
             return;
         }
-        lines.push(text_line(std::mem::take(text), rpr.take(), align.clone()));
+        lines.push(text_line(std::mem::take(text), rpr.take(), align.clone(), dpi));
     };
     for child in para.element_children() {
         match child.local_name() {
@@ -2420,11 +2471,11 @@ fn para_lines(para: &Element) -> Vec<TextLine> {
 }
 
 #[cfg(test)]
-fn para_line(para: &Element) -> Option<TextLine> {
-    para_lines(para).into_iter().next()
+fn para_line(para: &Element, dpi: RenderDpi) -> Option<TextLine> {
+    para_lines(para, dpi).into_iter().next()
 }
 
-fn text_line(text: String, rpr: Option<&Element>, align: String) -> TextLine {
+fn text_line(text: String, rpr: Option<&Element>, align: String, dpi: RenderDpi) -> TextLine {
     let sz = rpr
         .and_then(|el| el.attr("sz"))
         .and_then(|raw| raw.parse::<f32>().ok())
@@ -2438,7 +2489,7 @@ fn text_line(text: String, rpr: Option<&Element>, align: String) -> TextLine {
         .unwrap_or([0, 0, 0]);
     TextLine {
         text,
-        px: sz / 100.0 * 96.0 / 72.0,
+        px: dpi.pt_to_px_font((sz / 100.0) as f64) as f32,
         bold,
         color,
         latin: typeface(rpr, "latin"),
@@ -3459,6 +3510,7 @@ fn stroked_rect(
     part: &str,
     sp_pr: &Element,
     chain: &[super::layout_check::GroupXfrm],
+    dpi: RenderDpi,
 ) -> Result<Option<StrokedRect>, Error> {
     if sp_pr
         .child_by_local("effectLst")
@@ -3505,7 +3557,7 @@ fn stroked_rect(
     let Some(stroke) = stroke_color(sp_pr)? else {
         return Ok(None);
     };
-    let stroke_f = stroke_width_f(sp_pr);
+    let stroke_f = stroke_width_f(sp_pr, dpi);
     if stroke_f != 1.0 && stroke_f != 2.0 {
         return Ok(None);
     }
@@ -3525,7 +3577,7 @@ fn stroked_rect(
     };
     let (x, y, cx, cy) = xfrm_box(xfrm);
     let (x, y, cx, cy) = super::layout_check::map_emu(x, y, cx, cy, chain);
-    let (x, y, w, h) = (emu_px(x), emu_px(y), emu_px(cx), emu_px(cy));
+    let (x, y, w, h) = (emu_px(x, dpi), emu_px(y, dpi), emu_px(cx, dpi), emu_px(cy, dpi));
     if w <= 0 || h <= 0 {
         return Ok(None);
     }
@@ -3558,10 +3610,11 @@ fn paint_stroked_rect(
 fn plain_rect(
     sp: &Element,
     chain: &[super::layout_check::GroupXfrm],
+    dpi: RenderDpi,
 ) -> Option<([u8; 3], i32, i32, i32, i32)> {
     let sp_pr = sp.child_by_local("spPr")?;
     let color = opaque_rgb(sp_pr.child_by_local("solidFill")?)?;
-    let (x, y, w, h) = plain_box(sp, chain)?;
+    let (x, y, w, h) = plain_box(sp, chain, dpi)?;
     Some((color, x, y, w, h))
 }
 
@@ -3569,13 +3622,14 @@ fn plain_rect(
 fn translucent_rect(
     sp: &Element,
     chain: &[super::layout_check::GroupXfrm],
+    dpi: RenderDpi,
 ) -> Option<([u8; 3], u8, i32, i32, i32, i32)> {
     let sp_pr = sp.child_by_local("spPr")?;
     let (color, alpha) = rgba_of(sp_pr.child_by_local("solidFill")?)?;
     if alpha == 255 {
         return None;
     }
-    let (x, y, w, h) = plain_box(sp, chain)?;
+    let (x, y, w, h) = plain_box(sp, chain, dpi)?;
     Some((color, alpha, x, y, w, h))
 }
 
@@ -3583,6 +3637,7 @@ fn translucent_rect(
 fn plain_box(
     sp: &Element,
     chain: &[super::layout_check::GroupXfrm],
+    dpi: RenderDpi,
 ) -> Option<(i32, i32, i32, i32)> {
     let sp_pr = sp.child_by_local("spPr")?;
     if sp_pr
@@ -3604,12 +3659,12 @@ fn plain_box(
     let (x, y, cx, cy) = xfrm_box(xfrm);
     let (x, y, cx, cy) = turned_box(x, y, cx, cy, xfrm.attr("rot"))?;
     let (x, y, cx, cy) = super::layout_check::map_emu(x, y, cx, cy, chain);
-    let w = emu_px(cx);
-    let h = emu_px(cy);
+    let w = emu_px(cx, dpi);
+    let h = emu_px(cy, dpi);
     if w <= 0 || h <= 0 {
         return None;
     }
-    Some((emu_px(x), emu_px(y), w, h))
+    Some((emu_px(x, dpi), emu_px(y, dpi), w, h))
 }
 
 /// 实心矩形上没有颜色变换的 `schemeClr`。不是这种填充时返回 `None`，解析不了则整页失败。
@@ -3746,6 +3801,7 @@ fn paint_rotated_opaque_rect(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<bool, Error> {
     if !non_right_angle(sp_pr) {
         return Ok(false);
@@ -3802,10 +3858,10 @@ fn paint_rotated_opaque_rect(
         rgb,
         width,
         height,
-        emu_f(x) as f32,
-        emu_f(y) as f32,
-        emu_f(cx) as f32,
-        emu_f(cy) as f32,
+        emu_f(x, dpi) as f32,
+        emu_f(y, dpi) as f32,
+        emu_f(cx, dpi) as f32,
+        emu_f(cy, dpi) as f32,
         deg,
         color,
     );
@@ -3915,19 +3971,20 @@ fn blit_pic(
     rgb: &mut [u8],
     width: u32,
     height: u32,
+    dpi: RenderDpi,
 ) -> Result<(), Error> {
     let Some(fill) = pic.child_by_local("blipFill") else {
         return Err(unsupported());
     };
     let image = load_blip_png(pkg, slide_part, fill)?;
     let (x, y, cx, cy) = pic_box(pic, chain);
-    let dest_w = emu_px(cx);
-    let dest_h = emu_px(cy);
+    let dest_w = emu_px(cx, dpi);
+    let dest_h = emu_px(cy, dpi);
     if dest_w <= 0 || dest_h <= 0 {
         return Err(unsupported());
     }
-    let dest_x = emu_px(x);
-    let dest_y = emu_px(y);
+    let dest_x = emu_px(x, dpi);
+    let dest_y = emu_px(y, dpi);
     let dest_w = dest_w as u32;
     let dest_h = dest_h as u32;
     let crop = source_window(fill, image.w, image.h)?;
@@ -4355,20 +4412,20 @@ fn blend_rect(
     }
 }
 
-fn emu_span(emu: i64) -> Result<u32, Error> {
-    let px = emu_px(emu);
+fn emu_span(emu: i64, dpi: RenderDpi) -> Result<u32, Error> {
+    let px = emu_px(emu, dpi);
     if px < 1 || px > MAX_PX as i32 {
         return Err(unsupported());
     }
     Ok(px as u32)
 }
 
-fn emu_f(emu: i64) -> f64 {
-    (emu as f64) * DPI / EMU_PER_INCH
+fn emu_f(emu: i64, dpi: RenderDpi) -> f64 {
+    dpi.emu_to_px_f(emu as f64)
 }
 
-fn emu_px(emu: i64) -> i32 {
-    let px = emu_f(emu);
+fn emu_px(emu: i64, dpi: RenderDpi) -> i32 {
+    let px = emu_f(emu, dpi);
     if !px.is_finite() {
         return 0;
     }
@@ -4387,11 +4444,20 @@ fn parse_rgb(raw: &str) -> Option<[u8; 3]> {
     ])
 }
 
-fn encode_png(w: u32, h: u32, rgb: &[u8]) -> Result<Vec<u8>, Error> {
+fn encode_png(w: u32, h: u32, rgb: &[u8], dpi: RenderDpi) -> Result<Vec<u8>, Error> {
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, w, h);
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
+    // 仅非默认 DPI 写入 pHYs，使省略 dpi / dpi=96 的既有 PNG 字节保持不变。
+    if !dpi.is_default() {
+        let ppm = (dpi.get() / 0.0254).round() as u32;
+        encoder.set_pixel_dims(Some(png::PixelDimensions {
+            xppu: ppm,
+            yppu: ppm,
+            unit: png::Unit::Meter,
+        }));
+    }
     let mut writer = encoder.write_header().map_err(|_| unsupported())?;
     writer.write_image_data(rgb).map_err(|_| unsupported())?;
     drop(writer);
@@ -4410,7 +4476,7 @@ mod tests {
     fn flipped_solid_rect_keeps_the_same_box() {
         let xml = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm flipH="1" flipV="1"><a:off x="1828800" y="914400"/><a:ext cx="914400" cy="457200"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let doc = crate::xml::parse(xml.as_bytes()).unwrap();
-        let (color, x, y, w, h) = plain_rect(&doc.root, &[]).unwrap();
+        let (color, x, y, w, h) = plain_rect(&doc.root, &[], RenderDpi::DEFAULT).unwrap();
         assert_eq!(color, [0xEE, 0x44, 0x55]);
         assert_eq!((x, y, w, h), (192, 96, 96, 48));
     }
@@ -4422,7 +4488,7 @@ mod tests {
         let group = crate::xml::parse(grp.as_bytes()).unwrap();
         let chain = [super::super::layout_check::group_xfrm(&group.root)];
         let shape = crate::xml::parse(sp.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&shape.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&shape.root, &chain, RenderDpi::DEFAULT).unwrap();
         // 5000×1.5=7500 EMU，先换算再取整是 1 像素。先取整再乘会变成 2。
         assert_eq!((x, y, w, h), (1, 0, 144, 72));
     }
@@ -4444,9 +4510,9 @@ mod tests {
         let narrow = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="1905000" y="457200"/><a:ext cx="304800" cy="457200"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let wide = crate::xml::parse(wide.as_bytes()).unwrap();
         let narrow = crate::xml::parse(narrow.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (128, 0, 32, 160));
-        let (_, x, y, w, h) = plain_rect(&narrow.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&narrow.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (144, 120, 48, 32));
     }
 
@@ -4459,9 +4525,9 @@ mod tests {
         let plain = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="2667000" y="762000"/><a:ext cx="457200" cy="304800"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let turned = crate::xml::parse(turned.as_bytes()).unwrap();
         let plain = crate::xml::parse(plain.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&turned.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&turned.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (144, 16, 32, 160));
-        let (_, x, y, w, h) = plain_rect(&plain.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&plain.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (280, 80, 48, 32));
     }
 
@@ -4476,18 +4542,18 @@ mod tests {
         let wide = crate::xml::parse(wide.as_bytes()).unwrap();
         let side = crate::xml::parse(side.as_bytes()).unwrap();
         let chain = [super::super::layout_check::group_xfrm(&turned.root)];
-        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (276, 84, 160, 32));
-        let (_, x, y, w, h) = plain_rect(&side.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&side.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (340, 220, 32, 48));
         let wide = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm rot="5400000"><a:off x="1905000" y="4572000"/><a:ext cx="1524000" cy="304800"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let side = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="3810000" y="4572000"/><a:ext cx="457200" cy="304800"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let wide = crate::xml::parse(wide.as_bytes()).unwrap();
         let side = crate::xml::parse(side.as_bytes()).unwrap();
         let chain = [super::super::layout_check::group_xfrm(&flipped.root)];
-        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (416, 416, 32, 160));
-        let (_, x, y, w, h) = plain_rect(&side.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&side.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (264, 480, 48, 32));
     }
 
@@ -4500,9 +4566,9 @@ mod tests {
         let side = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm flipV="1"><a:off x="2667000" y="762000"/><a:ext cx="457200" cy="304800"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let wide = crate::xml::parse(wide.as_bytes()).unwrap();
         let side = crate::xml::parse(side.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (80, 80, 160, 32));
-        let (_, x, y, w, h) = plain_rect(&side.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&side.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (280, 80, 48, 32));
 
         let turned = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm><a:off x="1371600" y="2057400"/><a:ext cx="1752600" cy="1524000"/><a:chOff x="1371600" y="2057400"/><a:chExt cx="1752600" cy="1524000"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
@@ -4510,7 +4576,7 @@ mod tests {
         let chain = [super::super::layout_check::group_xfrm(&turned.root)];
         let child = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm rot="16200000" flipH="1"><a:off x="762000" y="2667000"/><a:ext cx="1524000" cy="304800"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let child = crate::xml::parse(child.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&child.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&child.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (144, 216, 32, 160));
 
         let flipped = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm flipH="1"><a:off x="762000" y="4953000"/><a:ext cx="2362200" cy="304800"/><a:chOff x="762000" y="4953000"/><a:chExt cx="2362200" cy="304800"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
@@ -4520,9 +4586,9 @@ mod tests {
         let side = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="2667000" y="4953000"/><a:ext cx="457200" cy="304800"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let wide = crate::xml::parse(wide.as_bytes()).unwrap();
         let side = crate::xml::parse(side.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (168, 520, 160, 32));
-        let (_, x, y, w, h) = plain_rect(&side.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&side.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (80, 520, 48, 32));
     }
 
@@ -4540,9 +4606,9 @@ mod tests {
         let side = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="1905000" y="762000"/><a:ext cx="381000" cy="228600"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let wide = crate::xml::parse(wide.as_bytes()).unwrap();
         let side = crate::xml::parse(side.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (100, 80, 80, 24));
-        let (_, x, y, w, h) = plain_rect(&side.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&side.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (200, 80, 40, 24));
 
         let outer = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm rot="5400000"><a:off x="952500" y="3429000"/><a:ext cx="1333500" cy="571500"/><a:chOff x="952500" y="3429000"/><a:chExt cx="1333500" cy="571500"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
@@ -4557,9 +4623,9 @@ mod tests {
         let side = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="1905000" y="3429000"/><a:ext cx="381000" cy="228600"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let wide = crate::xml::parse(wide.as_bytes()).unwrap();
         let side = crate::xml::parse(side.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (176, 320, 24, 80));
-        let (_, x, y, w, h) = plain_rect(&side.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&side.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (176, 420, 24, 40));
     }
 
@@ -4577,15 +4643,15 @@ mod tests {
         let side = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="1905000" y="762000"/><a:ext cx="381000" cy="228600"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let wide = crate::xml::parse(wide.as_bytes()).unwrap();
         let side = crate::xml::parse(side.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (158, 22, 24, 80));
-        let (_, x, y, w, h) = plain_rect(&side.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&side.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (158, 122, 24, 40));
 
         let chain = [super::super::layout_check::group_xfrm(&outer.root)];
         let extra = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="952500" y="1143000"/><a:ext cx="571500" cy="190500"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let extra = crate::xml::parse(extra.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&extra.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&extra.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (100, 120, 60, 20));
     }
 
@@ -4603,15 +4669,15 @@ mod tests {
         let side = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="1905000" y="762000"/><a:ext cx="381000" cy="228600"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let wide = crate::xml::parse(wide.as_bytes()).unwrap();
         let side = crate::xml::parse(side.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (131, 109, 80, 24));
-        let (_, x, y, w, h) = plain_rect(&side.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&side.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (71, 109, 40, 24));
 
         let chain = [super::super::layout_check::group_xfrm(&outer.root)];
         let extra = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="952500" y="1143000"/><a:ext cx="571500" cy="190500"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let extra = crate::xml::parse(extra.as_bytes()).unwrap();
-        let (_, x, y, w, h) = plain_rect(&extra.root, &chain).unwrap();
+        let (_, x, y, w, h) = plain_rect(&extra.root, &chain, RenderDpi::DEFAULT).unwrap();
         assert_eq!((x, y, w, h), (93, 51, 20, 60));
     }
 
@@ -4801,14 +4867,14 @@ mod tests {
             latin: "Calibri".to_string(),
             ea: "微软雅黑".to_string(),
         };
-        let line = cell_line(&doc.root, &fonts, true).unwrap();
+        let line = cell_line(&doc.root, &fonts, true, RenderDpi::DEFAULT).unwrap();
         assert_eq!(line.latin, "Calibri");
         assert_eq!(line.ea, "微软雅黑");
         assert!(line.bold);
         assert_eq!(line.color, [255, 255, 255]);
         assert!((line.px - 24.0).abs() < 0.01, "{}", line.px);
         assert_eq!(line.align, "l");
-        let body = cell_line(&doc.root, &fonts, false).unwrap();
+        let body = cell_line(&doc.root, &fonts, false, RenderDpi::DEFAULT).unwrap();
         assert!(!body.bold);
         assert_eq!(body.color, [0, 0, 0]);
     }
@@ -4821,7 +4887,7 @@ mod tests {
             latin: "Calibri".to_string(),
             ea: "微软雅黑".to_string(),
         };
-        let line = cell_line(&doc.root, &fonts, true).unwrap();
+        let line = cell_line(&doc.root, &fonts, true, RenderDpi::DEFAULT).unwrap();
         assert_eq!(line.latin, "Arial");
         assert_eq!(line.ea, "宋体");
         assert!(!line.bold);
@@ -4861,7 +4927,7 @@ mod tests {
                 rgb[i..i + 3].copy_from_slice(&color);
             }
         }
-        paint_default_table_grid(&mut rgb, w, h, &[8, 24], &[8, 24]);
+        paint_default_table_grid(&mut rgb, w, h, &[8, 24], &[8, 24], RenderDpi::DEFAULT);
         let at = |x: i32, y: i32| {
             let i = ((y as u32 * w + x as u32) * 3) as usize;
             [rgb[i], rgb[i + 1], rgb[i + 2]]
@@ -4882,11 +4948,11 @@ mod tests {
     #[test]
     fn table_grid_edges_round_the_cumulative_emu() {
         assert_eq!(
-            table_grid_edges(192, &[812800, 812800, 812800]),
+            table_grid_edges(192, &[812800, 812800, 812800], RenderDpi::DEFAULT),
             vec![192, 277, 363, 448]
         );
         assert_eq!(
-            table_grid_edges(384, &[914400, 914400]),
+            table_grid_edges(384, &[914400, 914400], RenderDpi::DEFAULT),
             vec![384, 480, 576]
         );
     }
@@ -4939,7 +5005,7 @@ mod tests {
     fn para_lines_keep_text_after_a_break() {
         let xml = r#"<a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:rPr sz="1800"><a:solidFill><a:srgbClr val="112233"/></a:solidFill><a:latin typeface="Calibri"/></a:rPr><a:t>AAAA</a:t></a:r><a:br/><a:r><a:rPr sz="1800"><a:solidFill><a:srgbClr val="112233"/></a:solidFill><a:latin typeface="Calibri"/></a:rPr><a:t>BBBB</a:t></a:r></a:p>"#;
         let doc = crate::xml::parse(xml.as_bytes()).unwrap();
-        let lines = para_lines(&doc.root);
+        let lines = para_lines(&doc.root, RenderDpi::DEFAULT);
         assert_eq!(
             lines
                 .iter()
@@ -4949,7 +5015,7 @@ mod tests {
         );
         assert_eq!(lines[1].color, [0x11, 0x22, 0x33]);
         assert_eq!(lines[1].latin, "Calibri");
-        assert_eq!(para_line(&doc.root).unwrap().text, "AAAA");
+        assert_eq!(para_line(&doc.root, RenderDpi::DEFAULT).unwrap().text, "AAAA");
     }
 
     #[test]
@@ -5265,7 +5331,7 @@ mod tests {
             50_000,
             50_000,
             50_000,
-        );
+         RenderDpi::DEFAULT);
         assert_eq!(
             b4.iter().copied().map(px).collect::<Vec<_>>(),
             vec![
@@ -5287,7 +5353,7 @@ mod tests {
             50_000,
             50_000,
             50_000,
-        );
+         RenderDpi::DEFAULT);
         assert_eq!(
             b4h.iter().copied().map(px).collect::<Vec<_>>(),
             vec![
@@ -5309,7 +5375,7 @@ mod tests {
             25_000,
             50_000,
             75_000,
-        );
+         RenderDpi::DEFAULT);
         assert_eq!(
             b5.iter().copied().map(px).collect::<Vec<_>>(),
             vec![
@@ -5332,7 +5398,7 @@ mod tests {
             50_000,
             50_000,
             50_000,
-        );
+         RenderDpi::DEFAULT);
         assert_eq!(
             b5d.iter().copied().map(px).collect::<Vec<_>>(),
             vec![
@@ -5355,7 +5421,7 @@ mod tests {
             25_000,
             50_000,
             50_000,
-        );
+         RenderDpi::DEFAULT);
         assert_eq!(
             mid.iter().copied().map(px).collect::<Vec<_>>(),
             vec![(96.0, 96.0), (144.0, 96.0), (144.0, 288.0), (288.0, 288.0)]
@@ -5429,7 +5495,7 @@ mod tests {
             50_000,
             50_000,
             50_000,
-        );
+         RenderDpi::DEFAULT);
         assert_eq!(
             c4,
             vec![
@@ -5456,7 +5522,7 @@ mod tests {
             50_000,
             50_000,
             50_000,
-        );
+         RenderDpi::DEFAULT);
         assert_eq!(
             c4h,
             vec![
@@ -5483,7 +5549,7 @@ mod tests {
             25_000,
             50_000,
             75_000,
-        );
+         RenderDpi::DEFAULT);
         assert_eq!(
             c5,
             vec![
@@ -5513,7 +5579,7 @@ mod tests {
             50_000,
             50_000,
             50_000,
-        );
+         RenderDpi::DEFAULT);
         assert_eq!(
             c5d,
             vec![
@@ -5543,7 +5609,7 @@ mod tests {
             25_000,
             50_000,
             50_000,
-        );
+         RenderDpi::DEFAULT);
         assert_eq!(
             c3,
             vec![

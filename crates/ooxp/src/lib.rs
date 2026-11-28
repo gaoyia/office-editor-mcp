@@ -22,6 +22,7 @@ mod opc;
 mod password;
 mod pptx;
 mod props;
+pub(crate) mod render_dpi;
 mod shape_runs;
 mod smartart;
 mod svg;

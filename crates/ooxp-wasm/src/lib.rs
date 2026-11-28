@@ -325,4 +325,42 @@ mod tests {
             other => panic!("{other:?}"),
         }
     }
+
+    fn png_size(bytes: &[u8]) -> (u32, u32) {
+        assert!(bytes.starts_with(&[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+        let w = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
+        let h = u32::from_be_bytes(bytes[20..24].try_into().unwrap());
+        (w, h)
+    }
+
+    #[test]
+    fn export_page_image_accepts_dpi_through_run_bytes() {
+        let host = Host::boot();
+        let made = host.run_inner(
+            r#"{"schemaVersion":1,"action":"create","path":"note.docx","document":{"paragraphs":[{"text":""}]}}"#,
+            None,
+        );
+        let bytes = match made {
+            Outcome::Bytes { bytes, .. } => bytes,
+            other => panic!("{other:?}"),
+        };
+        let exported = host.run_inner(
+            r#"{"schemaVersion":1,"action":"exportPageImage","path":"note.docx","id":"page:1","output":"page.png","dpi":192}"#,
+            Some(&bytes),
+        );
+        match exported {
+            Outcome::Bytes {
+                path,
+                bytes,
+                content_type,
+                ..
+            } => {
+                assert_eq!(path, "page.png");
+                assert_eq!(content_type.as_deref(), Some("image/png"));
+                assert_eq!(png_size(&bytes), (1587, 2245));
+            }
+            Outcome::Fail(value) => panic!("{value}"),
+            Outcome::Json(value) => panic!("{value}"),
+        }
+    }
 }
